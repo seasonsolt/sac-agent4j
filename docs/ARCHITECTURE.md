@@ -169,9 +169,9 @@ These are intentional review targets, not emergencies.
 
 The sealed hierarchy is now explicit, but all action records still live in `Action.java`. This keeps the MVP compact; later, each action family could move into its own package.
 
-### 3. Tool process execution is still duplicated
+### 3. Process execution is centralized
 
-`ShellTool`, `RunTestsTool`, and `ApplyPatchTool` are separated by capability, but process execution concerns such as timeout and stdout/stderr collection should eventually move behind a small `ProcessRunner`.
+`ShellTool`, `RunTestsTool`, and `ApplyPatchTool` are separated by capability and now share `ProcessRunner` for timeout handling, stdin, and stdout/stderr capture. Future work can still add richer process events or streaming output, but command-backed tool execution now has one adapter boundary.
 
 ## Current refined class shape
 
@@ -275,7 +275,7 @@ Use these questions before adding new features:
 | Done | Remove tool facade from main runtime path | `AgentLoop`/CLI now wire `ToolActionHandler` directly. |
 | Done | Remove prompt compatibility facade | Deleted `ContextBuilder` / `ContextManagers`; `ContextManager` is the only prompt seam. |
 | Done | Merge decision types | `ToolPolicy` now returns `PermissionDecision`; `PolicyDecision` is gone. |
-| P1 | Add `ProcessRunner` | Share timeout/stdout/stderr handling across shell, tests, and patch tools. |
+| Done | Add `ProcessRunner` | Shared timeout/stdout/stderr/stdin handling across shell, tests, and patch tools. |
 | P2 | Add checkpoint/persistence seam | Move beyond in-memory state when needed. |
 
 ## Relationship to LangChain Deep Agents / pi-style coding agents

@@ -11,6 +11,6 @@ public final class RunTestsTool implements Tool {
 
     @Override
     public Observation execute(Action.ToolAction action, ToolContext context) throws Exception {
-        return ShellTool.runShell(context, context.testCommand());
+        return ProcessRunner.runShell(context.workspace().root(), context.testCommand(), ShellTool.DEFAULT_TIMEOUT);
     }
 }

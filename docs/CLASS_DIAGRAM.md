@@ -244,6 +244,11 @@ classDiagram
       +applyPatch(patch) Observation
     }
 
+    class ProcessRunner {
+      +runShell(workingDirectory, command, timeout) Observation
+      +run(workingDirectory, command, timeout, stdin) Observation
+    }
+
     class ToolPolicy {
       -List~Pattern~ deniedShellPatterns
       +defaultPolicy() ToolPolicy
@@ -300,6 +305,9 @@ classDiagram
     Tool <|.. ApplyPatchTool
     Tool <|.. RunTestsTool
     Tool --> RiskLevel
+    ShellTool --> ProcessRunner
+    ApplyPatchTool --> ProcessRunner
+    RunTestsTool --> ProcessRunner
     PermissionGate --> PermissionDecision
     ToolExecutor --> ToolActionHandler : compatibility facade
     StateActionHandler --> AgentState
@@ -356,6 +364,7 @@ ToolActionHandler  = tool registry + permission gate orchestration
 ToolRegistry       = available workspace capabilities
 PermissionGate     = risk boundary before tool execution
 ToolActionHandler  = side-effect execution boundary
+ProcessRunner      = command process adapter
 ToolExecutor       = optional compatibility facade, outside main loop
 LlmClient          = model boundary
 TrajectoryLogger   = trace boundary
@@ -368,6 +377,7 @@ TrajectoryLogger   = trace boundary
 - Prompt sections are represented by `Prompt` and independent renderers.
 - The main runtime path now goes through `ToolActionHandler`, `ToolRegistry`, and `PermissionGate` directly.
 - `ToolExecutor` only accepts `ToolAction` and remains outside the main loop as an optional compatibility facade.
+- `ProcessRunner` centralizes process timeout, stdin, and stdout/stderr capture for command-backed tools.
 - `AgentState` no longer accepts action records; state mutation semantics moved to `StateActionHandler`.
 - `AgentRun` owns history, state, step budget, and run result construction.
 - The Java sealed hierarchy now expresses action ontology directly.
