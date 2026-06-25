@@ -39,6 +39,8 @@ public final class ToolExecutor {
     /** Dispatches one model action to its concrete tool implementation. */
     public Observation execute(Action action) throws Exception {
         return switch (action) {
+            case Action.SetPlan ignored -> Observation.failed("set_plan is handled by AgentLoop");
+            case Action.UpdateTodo ignored -> Observation.failed("update_todo is handled by AgentLoop");
             case Action.ReadFile readFile -> readFile(readFile.path());
             case Action.Search search -> search(search.query());
             case Action.Shell shell -> shell(shell.command());

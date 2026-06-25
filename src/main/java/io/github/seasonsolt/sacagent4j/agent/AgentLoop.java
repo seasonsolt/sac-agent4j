@@ -1,6 +1,7 @@
 package io.github.seasonsolt.sacagent4j.agent;
 
 import io.github.seasonsolt.sacagent4j.llm.LlmClient;
+import io.github.seasonsolt.sacagent4j.plan.TodoList;
 import io.github.seasonsolt.sacagent4j.tool.ToolExecutor;
 import io.github.seasonsolt.sacagent4j.trajectory.NoopTrajectoryLogger;
 import io.github.seasonsolt.sacagent4j.trajectory.TrajectoryLogger;
@@ -23,6 +24,7 @@ public final class AgentLoop {
     private final int maxSteps;
     private final TrajectoryLogger trajectoryLogger;
     private final List<Turn> history = new ArrayList<>();
+    private final TodoList todoList = new TodoList();
 
     public AgentLoop(LlmClient llmClient, ToolExecutor toolExecutor, ContextBuilder contextBuilder, int maxSteps) {
         this(llmClient, toolExecutor, contextBuilder, maxSteps, new NoopTrajectoryLogger());
@@ -49,14 +51,14 @@ public final class AgentLoop {
         trajectoryLogger.started(task, maxSteps);
         try {
             for (int step = 0; step < maxSteps; step++) {
-                String context = contextBuilder.build(task, history);
+                String context = contextBuilder.build(task, history, todoList);
                 Action action = llmClient.nextAction(context);
                 if (action instanceof Action.Finish finish) {
                     AgentResult result = AgentResult.finished(finish.summary(), history);
                     trajectoryLogger.finished(result.finished(), result.summary(), result.history().size());
                     return result;
                 }
-                Observation observation = toolExecutor.execute(action);
+                Observation observation = execute(action);
                 history.add(new Turn(action, observation));
                 trajectoryLogger.turn(step, action, observation);
             }
@@ -66,5 +68,19 @@ public final class AgentLoop {
         } finally {
             trajectoryLogger.close();
         }
+    }
+
+    public List<io.github.seasonsolt.sacagent4j.plan.TodoItem> plan() {
+        return todoList.items();
+    }
+
+    private Observation execute(Action action) throws Exception {
+        if (action instanceof Action.SetPlan setPlan) {
+            return todoList.setPlan(setPlan);
+        }
+        if (action instanceof Action.UpdateTodo updateTodo) {
+            return todoList.updateTodo(updateTodo);
+        }
+        return toolExecutor.execute(action);
     }
 }

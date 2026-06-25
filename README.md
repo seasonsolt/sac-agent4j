@@ -20,6 +20,8 @@ build context -> ask for one JSON action -> execute tool -> record observation -
 ## Actions
 
 ```json
+{"type":"set_plan","items":["inspect failure","patch bug","run tests"]}
+{"type":"update_todo","id":1,"status":"in_progress"}
 {"type":"read_file","path":"README.md"}
 {"type":"search","query":"TODO"}
 {"type":"shell","command":"mvn test"}
@@ -54,12 +56,32 @@ CalculatorTest passed
 The demo trajectory shows the full loop:
 
 ```text
+set_plan         -> create explicit todo list
+update_todo      -> mark current step in_progress/completed
 shell ./test.sh  -> failing AssertionError
 read_file        -> inspect Calculator.java
 apply_patch      -> change left - right to left + right
 run_tests        -> CalculatorTest passed
 finish
 ```
+
+## Plan / todo list
+
+For non-trivial tasks, the model can make progress explicit before editing:
+
+```json
+{"type":"set_plan","items":["reproduce failure","inspect code","apply fix","run tests"]}
+{"type":"update_todo","id":1,"status":"in_progress"}
+{"type":"update_todo","id":1,"status":"completed"}
+```
+
+Todo ids are 1-based and statuses are:
+
+```text
+pending | in_progress | completed | cancelled
+```
+
+The current plan is rendered into every subsequent prompt, and plan actions are also recorded in the JSONL trajectory.
 
 ## Run
 

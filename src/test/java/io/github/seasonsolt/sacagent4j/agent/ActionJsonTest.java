@@ -1,6 +1,7 @@
 package io.github.seasonsolt.sacagent4j.agent;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.github.seasonsolt.sacagent4j.plan.TodoStatus;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -14,6 +15,18 @@ class ActionJsonTest {
         Action action = objectMapper.readValue("{\"type\":\"read_file\",\"path\":\"README.md\"}", Action.class);
         Action.ReadFile readFile = assertInstanceOf(Action.ReadFile.class, action);
         assertEquals("README.md", readFile.path());
+    }
+
+    @Test
+    void parsesPlanActions() throws Exception {
+        Action setPlanAction = objectMapper.readValue("{\"type\":\"set_plan\",\"items\":[\"inspect\",\"patch\"]}", Action.class);
+        Action.SetPlan setPlan = assertInstanceOf(Action.SetPlan.class, setPlanAction);
+        assertEquals(2, setPlan.items().size());
+
+        Action updateAction = objectMapper.readValue("{\"type\":\"update_todo\",\"id\":1,\"status\":\"in_progress\"}", Action.class);
+        Action.UpdateTodo updateTodo = assertInstanceOf(Action.UpdateTodo.class, updateAction);
+        assertEquals(1, updateTodo.id());
+        assertEquals(TodoStatus.in_progress, updateTodo.status());
     }
 
     @Test

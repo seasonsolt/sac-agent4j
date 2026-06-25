@@ -41,10 +41,19 @@ import json
 import os
 patch = os.environ["PATCH"] + "\n"
 for action in [
+    {"type": "set_plan", "items": ["reproduce failing test", "inspect Calculator implementation", "apply minimal fix", "rerun tests"]},
+    {"type": "update_todo", "id": 1, "status": "in_progress"},
     {"type": "shell", "command": "./test.sh"},
+    {"type": "update_todo", "id": 1, "status": "completed"},
+    {"type": "update_todo", "id": 2, "status": "in_progress"},
     {"type": "read_file", "path": "src/Calculator.java"},
+    {"type": "update_todo", "id": 2, "status": "completed"},
+    {"type": "update_todo", "id": 3, "status": "in_progress"},
     {"type": "apply_patch", "patch": patch},
+    {"type": "update_todo", "id": 3, "status": "completed"},
+    {"type": "update_todo", "id": 4, "status": "in_progress"},
     {"type": "run_tests"},
+    {"type": "update_todo", "id": 4, "status": "completed"},
     {"type": "finish", "summary": "fixed Calculator.add and verified ./test.sh passes"},
 ]:
     print(json.dumps(action))
@@ -56,7 +65,7 @@ echo "== Running sac-agent4j scripted JSON-line demo =="
 printf '%s\n' "$ACTIONS" | java -jar "$JAR" \
   --workspace "$DEMO_WORKSPACE" \
   --test-command "./test.sh" \
-  --max-steps 8 \
+  --max-steps 16 \
   "Fix the failing Calculator.add test"
 
 echo
