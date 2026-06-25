@@ -53,7 +53,7 @@ public final class JsonlTrajectoryLogger implements TrajectoryLogger {
     public void turn(int step, Action action, Observation observation) throws Exception {
         ObjectNode event = baseEvent("turn");
         event.put("step", step);
-        event.set("action", objectMapper.valueToTree(action));
+        event.set("action", actionForLog(action));
         event.set("observation", objectMapper.valueToTree(observation));
         write(event);
     }
@@ -77,6 +77,18 @@ public final class JsonlTrajectoryLogger implements TrajectoryLogger {
         event.put("timestamp", Instant.now().toString());
         event.put("event", eventType);
         return event;
+    }
+
+    private ObjectNode actionForLog(Action action) {
+        if (action instanceof Action.OffloadContext offloadContext) {
+            ObjectNode node = objectMapper.createObjectNode();
+            node.put("type", "offload_context");
+            node.put("key", offloadContext.key());
+            node.put("title", offloadContext.title());
+            node.put("contentChars", offloadContext.content() == null ? 0 : offloadContext.content().length());
+            return node;
+        }
+        return objectMapper.valueToTree(action);
     }
 
     private void write(ObjectNode event) throws IOException {

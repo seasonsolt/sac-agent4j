@@ -1,7 +1,8 @@
 package io.github.seasonsolt.sacagent4j.agent;
 
 import io.github.seasonsolt.sacagent4j.llm.LlmClient;
-import io.github.seasonsolt.sacagent4j.plan.TodoList;
+import io.github.seasonsolt.sacagent4j.plan.TodoItem;
+import io.github.seasonsolt.sacagent4j.state.AgentState;
 import io.github.seasonsolt.sacagent4j.tool.ToolExecutor;
 import io.github.seasonsolt.sacagent4j.trajectory.NoopTrajectoryLogger;
 import io.github.seasonsolt.sacagent4j.trajectory.TrajectoryLogger;
@@ -24,7 +25,7 @@ public final class AgentLoop {
     private final int maxSteps;
     private final TrajectoryLogger trajectoryLogger;
     private final List<Turn> history = new ArrayList<>();
-    private final TodoList todoList = new TodoList();
+    private final AgentState agentState = new AgentState();
 
     public AgentLoop(LlmClient llmClient, ToolExecutor toolExecutor, ContextBuilder contextBuilder, int maxSteps) {
         this(llmClient, toolExecutor, contextBuilder, maxSteps, new NoopTrajectoryLogger());
@@ -51,7 +52,7 @@ public final class AgentLoop {
         trajectoryLogger.started(task, maxSteps);
         try {
             for (int step = 0; step < maxSteps; step++) {
-                String context = contextBuilder.build(task, history, todoList);
+                String context = contextBuilder.build(task, history, agentState);
                 Action action = llmClient.nextAction(context);
                 if (action instanceof Action.Finish finish) {
                     AgentResult result = AgentResult.finished(finish.summary(), history);
@@ -70,16 +71,32 @@ public final class AgentLoop {
         }
     }
 
-    public List<io.github.seasonsolt.sacagent4j.plan.TodoItem> plan() {
-        return todoList.items();
+    public AgentState state() {
+        return agentState;
+    }
+
+    public List<TodoItem> plan() {
+        return agentState.plan();
     }
 
     private Observation execute(Action action) throws Exception {
         if (action instanceof Action.SetPlan setPlan) {
-            return todoList.setPlan(setPlan);
+            return agentState.setPlan(setPlan);
         }
         if (action instanceof Action.UpdateTodo updateTodo) {
-            return todoList.updateTodo(updateTodo);
+            return agentState.updateTodo(updateTodo);
+        }
+        if (action instanceof Action.WriteVirtualFile writeVirtualFile) {
+            return agentState.writeVirtualFile(writeVirtualFile);
+        }
+        if (action instanceof Action.ReadVirtualFile readVirtualFile) {
+            return agentState.readVirtualFile(readVirtualFile);
+        }
+        if (action instanceof Action.OffloadContext offloadContext) {
+            return agentState.offloadContext(offloadContext);
+        }
+        if (action instanceof Action.ReadContext readContext) {
+            return agentState.readContext(readContext);
         }
         return toolExecutor.execute(action);
     }

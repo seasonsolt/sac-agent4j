@@ -30,6 +30,20 @@ class ActionJsonTest {
     }
 
     @Test
+    void parsesAgentStateActions() throws Exception {
+        Action writeVirtual = objectMapper.readValue("{\"type\":\"write_virtual_file\",\"path\":\"notes/a.md\",\"content\":\"hello\"}", Action.class);
+        Action.WriteVirtualFile writeVirtualFile = assertInstanceOf(Action.WriteVirtualFile.class, writeVirtual);
+        assertEquals("notes/a.md", writeVirtualFile.path());
+
+        Action offload = objectMapper.readValue("{\"type\":\"offload_context\",\"key\":\"log\",\"title\":\"test log\",\"content\":\"long\"}", Action.class);
+        Action.OffloadContext offloadContext = assertInstanceOf(Action.OffloadContext.class, offload);
+        assertEquals("log", offloadContext.key());
+
+        Action readContext = objectMapper.readValue("{\"type\":\"read_context\",\"key\":\"log\"}", Action.class);
+        assertInstanceOf(Action.ReadContext.class, readContext);
+    }
+
+    @Test
     void writesFinishAction() throws Exception {
         String json = objectMapper.writeValueAsString(new Action.Finish("done"));
         assertEquals("{\"type\":\"finish\",\"summary\":\"done\"}", json);

@@ -59,4 +59,29 @@ class AgentLoopTest {
         assertEquals(TodoStatus.pending, loop.plan().get(1).status());
     }
 
+
+    @Test
+    void carriesVirtualFilesAndOffloadedContextInAgentState() throws Exception {
+        AgentLoop loop = new AgentLoop(
+                new ScriptedLlmClient(List.of(
+                        new Action.WriteVirtualFile("notes/root-cause.md", "subtraction used instead of addition"),
+                        new Action.ReadVirtualFile("notes/root-cause.md"),
+                        new Action.OffloadContext("failure-log", "full failure log", "very long test output"),
+                        new Action.ReadContext("failure-log"),
+                        new Action.Finish("state demo")
+                )),
+                new ToolExecutor(new Workspace(tempDir), "true"),
+                new ContextBuilder(new ObjectMapper()),
+                8
+        );
+
+        AgentResult result = loop.run("state demo");
+        assertTrue(result.finished());
+        assertEquals(4, result.history().size());
+        assertEquals(1, loop.state().virtualFileSummary().size());
+        assertEquals(1, loop.state().contextSummary().size());
+        assertTrue(result.history().get(1).observation().output().contains("subtraction used"));
+        assertTrue(result.history().get(3).observation().output().contains("very long test output"));
+    }
+
 }

@@ -22,6 +22,10 @@ build context -> ask for one JSON action -> execute tool -> record observation -
 ```json
 {"type":"set_plan","items":["inspect failure","patch bug","run tests"]}
 {"type":"update_todo","id":1,"status":"in_progress"}
+{"type":"write_virtual_file","path":"notes/root-cause.md","content":"..."}
+{"type":"read_virtual_file","path":"notes/root-cause.md"}
+{"type":"offload_context","key":"test-output","title":"full failing test log","content":"..."}
+{"type":"read_context","key":"test-output"}
 {"type":"read_file","path":"README.md"}
 {"type":"search","query":"TODO"}
 {"type":"shell","command":"mvn test"}
@@ -59,7 +63,9 @@ The demo trajectory shows the full loop:
 set_plan         -> create explicit todo list
 update_todo      -> mark current step in_progress/completed
 shell ./test.sh  -> failing AssertionError
+offload_context  -> store bulky failure notes behind a key
 read_file        -> inspect Calculator.java
+write_virtual_file -> save root-cause notes in AgentState
 apply_patch      -> change left - right to left + right
 run_tests        -> CalculatorTest passed
 finish
@@ -82,6 +88,34 @@ pending | in_progress | completed | cancelled
 ```
 
 The current plan is rendered into every subsequent prompt, and plan actions are also recorded in the JSONL trajectory.
+
+
+## AgentState: virtual files and context offload
+
+`sac-agent4j` keeps a single in-memory `AgentState` for each run. It currently contains:
+
+```text
+AgentState
+  ├── TodoList
+  ├── VirtualFileSystem
+  └── ContextOffloadStore
+```
+
+Virtual files are scratch notes/drafts that do not touch the real workspace:
+
+```json
+{"type":"write_virtual_file","path":"notes/root-cause.md","content":"..."}
+{"type":"read_virtual_file","path":"notes/root-cause.md"}
+```
+
+Context offload stores bulky text behind a small key. The prompt shows only the key/title/size until the model explicitly asks to read it:
+
+```json
+{"type":"offload_context","key":"failure-log","title":"full test output","content":"...large text..."}
+{"type":"read_context","key":"failure-log"}
+```
+
+This follows the same broad idea as LangChain deepagents' filesystem/context-management features, but keeps the Java MVP framework-free and inspectable.
 
 ## Run
 

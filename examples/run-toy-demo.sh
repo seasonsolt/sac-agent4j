@@ -44,9 +44,11 @@ for action in [
     {"type": "set_plan", "items": ["reproduce failing test", "inspect Calculator implementation", "apply minimal fix", "rerun tests"]},
     {"type": "update_todo", "id": 1, "status": "in_progress"},
     {"type": "shell", "command": "./test.sh"},
+    {"type": "offload_context", "key": "failure-log", "title": "baseline CalculatorTest failure", "content": "Calculator.add(2, 3) returned -1 because implementation subtracts right from left"},
     {"type": "update_todo", "id": 1, "status": "completed"},
     {"type": "update_todo", "id": 2, "status": "in_progress"},
     {"type": "read_file", "path": "src/Calculator.java"},
+    {"type": "write_virtual_file", "path": "notes/root-cause.md", "content": "Calculator.add currently uses subtraction. Replace left - right with left + right."},
     {"type": "update_todo", "id": 2, "status": "completed"},
     {"type": "update_todo", "id": 3, "status": "in_progress"},
     {"type": "apply_patch", "patch": patch},
@@ -65,7 +67,7 @@ echo "== Running sac-agent4j scripted JSON-line demo =="
 printf '%s\n' "$ACTIONS" | java -jar "$JAR" \
   --workspace "$DEMO_WORKSPACE" \
   --test-command "./test.sh" \
-  --max-steps 16 \
+  --max-steps 18 \
   "Fix the failing Calculator.add test"
 
 echo

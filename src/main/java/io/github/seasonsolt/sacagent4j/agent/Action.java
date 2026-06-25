@@ -16,6 +16,10 @@ import java.util.List;
 @JsonSubTypes({
         @JsonSubTypes.Type(value = Action.SetPlan.class, name = "set_plan"),
         @JsonSubTypes.Type(value = Action.UpdateTodo.class, name = "update_todo"),
+        @JsonSubTypes.Type(value = Action.WriteVirtualFile.class, name = "write_virtual_file"),
+        @JsonSubTypes.Type(value = Action.ReadVirtualFile.class, name = "read_virtual_file"),
+        @JsonSubTypes.Type(value = Action.OffloadContext.class, name = "offload_context"),
+        @JsonSubTypes.Type(value = Action.ReadContext.class, name = "read_context"),
         @JsonSubTypes.Type(value = Action.ReadFile.class, name = "read_file"),
         @JsonSubTypes.Type(value = Action.Search.class, name = "search"),
         @JsonSubTypes.Type(value = Action.Shell.class, name = "shell"),
@@ -23,12 +27,24 @@ import java.util.List;
         @JsonSubTypes.Type(value = Action.RunTests.class, name = "run_tests"),
         @JsonSubTypes.Type(value = Action.Finish.class, name = "finish")
 })
-public sealed interface Action permits Action.SetPlan, Action.UpdateTodo, Action.ReadFile, Action.Search, Action.Shell, Action.ApplyPatch, Action.RunTests, Action.Finish {
+public sealed interface Action permits Action.SetPlan, Action.UpdateTodo, Action.WriteVirtualFile, Action.ReadVirtualFile, Action.OffloadContext, Action.ReadContext, Action.ReadFile, Action.Search, Action.Shell, Action.ApplyPatch, Action.RunTests, Action.Finish {
     /** Replace the current plan with a short ordered todo list. */
     record SetPlan(List<String> items) implements Action {}
 
     /** Update a 1-based todo id to pending, in_progress, completed, or cancelled. */
     record UpdateTodo(int id, TodoStatus status) implements Action {}
+
+    /** Write an in-memory note/draft without touching the real workspace. */
+    record WriteVirtualFile(String path, String content) implements Action {}
+
+    /** Read an in-memory note/draft from agent state. */
+    record ReadVirtualFile(String path) implements Action {}
+
+    /** Store bulky context behind a small key so future prompts can stay compact. */
+    record OffloadContext(String key, String title, String content) implements Action {}
+
+    /** Retrieve content previously stored with offload_context. */
+    record ReadContext(String key) implements Action {}
 
     /** Read one file from the workspace. */
     record ReadFile(String path) implements Action {}
