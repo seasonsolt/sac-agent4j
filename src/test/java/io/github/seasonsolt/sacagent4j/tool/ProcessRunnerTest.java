@@ -1,5 +1,6 @@
 package io.github.seasonsolt.sacagent4j.tool;
 
+import io.github.seasonsolt.sacagent4j.agent.Action;
 import io.github.seasonsolt.sacagent4j.agent.Observation;
 import io.github.seasonsolt.sacagent4j.workspace.Workspace;
 import org.junit.jupiter.api.Test;
@@ -56,9 +57,10 @@ class ProcessRunnerTest {
                 + "@@ -1 +1 @@\n"
                 + "-before\n"
                 + "+after\n";
-        ToolExecutor tools = new ToolExecutor(new Workspace(tempDir), "true");
+        ToolActionHandler handler = new ToolActionHandler(ToolRegistry.defaultRegistry(), new DefaultPermissionGate());
+        ToolContext context = new ToolContext(new Workspace(tempDir), "true", ToolPolicy.defaultPolicy());
 
-        Observation observation = tools.applyPatch(patch);
+        Observation observation = handler.execute(new Action.ApplyPatch(patch), context);
 
         assertEquals(0, observation.exitCode());
         assertEquals("after\n", Files.readString(tempDir.resolve("file.txt")));

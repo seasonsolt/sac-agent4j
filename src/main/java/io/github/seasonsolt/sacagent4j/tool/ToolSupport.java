@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Comparator;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Stream;
 
 final class ToolSupport {
@@ -22,16 +23,23 @@ final class ToolSupport {
 
     static String literalSearch(Workspace workspace, String query) throws IOException {
         StringBuilder out = new StringBuilder();
+        AtomicInteger skippedFiles = new AtomicInteger();
         try (Stream<Path> paths = Files.walk(workspace.root())) {
             paths.filter(Files::isRegularFile)
                     .filter(path -> !isIgnored(workspace, path))
                     .sorted(Comparator.comparing(Path::toString))
-                    .forEach(path -> appendMatches(workspace, path, query, out));
+                    .forEach(path -> appendMatches(workspace, path, query, out, skippedFiles));
         }
-        return out.isEmpty() ? "no matches" : truncate(out.toString());
+        if (out.isEmpty()) {
+            out.append("no matches");
+        }
+        if (skippedFiles.get() > 0) {
+            out.append("\n(skipped ").append(skippedFiles.get()).append(" unreadable file(s))");
+        }
+        return truncate(out.toString());
     }
 
-    private static void appendMatches(Workspace workspace, Path path, String query, StringBuilder out) {
+    private static void appendMatches(Workspace workspace, Path path, String query, StringBuilder out, AtomicInteger skippedFiles) {
         try {
             int lineNo = 1;
             for (String line : Files.readAllLines(path)) {
@@ -41,8 +49,8 @@ final class ToolSupport {
                 }
                 lineNo++;
             }
-        } catch (Exception ignored) {
-            // Binary or unreadable files are irrelevant for the minimal search tool.
+        } catch (IOException e) {
+            skippedFiles.incrementAndGet();
         }
     }
 

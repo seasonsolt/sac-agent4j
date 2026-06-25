@@ -12,7 +12,7 @@ public final class DefaultContextManager implements ContextManager {
     private final HistoryRenderer historyRenderer;
 
     public DefaultContextManager(ObjectMapper objectMapper) {
-        this(new SystemPromptRenderer(), new ActionProtocolRenderer(), new TaskRenderer(),
+        this(new SystemPromptRenderer(), new ActionProtocolRenderer(objectMapper), new TaskRenderer(),
                 new AgentStateRenderer(), new HistoryRenderer(objectMapper));
     }
 

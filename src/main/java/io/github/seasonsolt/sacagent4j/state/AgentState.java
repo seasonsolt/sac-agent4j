@@ -11,7 +11,7 @@ import java.util.Map;
  *
  * <p>State owns the data structures. Action semantics live in
  * {@link io.github.seasonsolt.sacagent4j.agent.StateActionHandler}, keeping this
- * class closer to a state model than a dispatcher.</p>
+ * class as a pure state model rather than a dispatcher or renderer.</p>
  */
 public final class AgentState {
     private final TodoList todoList = new TodoList();
@@ -34,33 +34,11 @@ public final class AgentState {
         return todoList.items();
     }
 
-    public String renderPlan() {
-        return todoList.render();
-    }
-
     public Map<String, Integer> virtualFileSummary() {
         return virtualFileSystem.summary();
     }
 
     public Map<String, String> contextSummary() {
         return contextOffloads.summary();
-    }
-
-    public String renderStateSummary() {
-        StringBuilder out = new StringBuilder();
-        out.append("Current plan:\n").append(renderPlan()).append('\n');
-        out.append("Virtual files:\n");
-        if (virtualFileSummary().isEmpty()) {
-            out.append("No virtual files. Use write_virtual_file for notes or drafts.\n");
-        } else {
-            virtualFileSummary().forEach((path, chars) -> out.append("- ").append(path).append(" (").append(chars).append(" chars)\n"));
-        }
-        out.append("Context offloads:\n");
-        if (contextSummary().isEmpty()) {
-            out.append("No offloaded context. Use offload_context for bulky snippets.\n");
-        } else {
-            contextSummary().forEach((key, summary) -> out.append("- ").append(key).append(": ").append(summary).append('\n'));
-        }
-        return out.toString();
     }
 }

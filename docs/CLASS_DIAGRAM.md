@@ -87,6 +87,18 @@ classDiagram
     class OpenAiCompatibleLlmClient
     class ScriptedLlmClient
 
+    class ActionCatalog {
+      +examples() List~Example~
+      +exampleJsonLines(objectMapper) List~String~
+      +runtimeTypesByClass() Map~Class,String~
+    }
+
+    class ActionExample {
+      +String type
+      +Class actionClass
+      +Action action
+    }
+
     class Action {
       <<sealed interface>>
     }
@@ -142,7 +154,8 @@ classDiagram
       +virtualFileSystem() VirtualFileSystem
       +contextOffloads() ContextOffloadStore
       +plan() List~TodoItem~
-      +renderStateSummary() String
+      +virtualFileSummary() Map~String,Integer~
+      +contextSummary() Map~String,String~
     }
 
     class TodoList {
@@ -234,16 +247,6 @@ classDiagram
     class ApplyPatchTool
     class RunTestsTool
 
-    class ToolExecutor {
-      -ToolContext context
-      -ToolActionHandler handler
-      +execute(toolAction) Observation
-      +readFile(path) Observation
-      +search(query) Observation
-      +shell(command) Observation
-      +applyPatch(patch) Observation
-    }
-
     class ProcessRunner {
       +runShell(workingDirectory, command, timeout) Observation
       +run(workingDirectory, command, timeout, stdin) Observation
@@ -282,6 +285,9 @@ classDiagram
     DefaultContextManager --> Prompt
     DefaultContextManager --> SystemPromptRenderer
     DefaultContextManager --> ActionProtocolRenderer
+    ActionProtocolRenderer --> ActionCatalog
+    ActionCatalog *-- ActionExample
+    ActionCatalog --> Action
     DefaultContextManager --> TaskRenderer
     DefaultContextManager --> AgentStateRenderer
     DefaultContextManager --> HistoryRenderer
@@ -309,7 +315,6 @@ classDiagram
     ApplyPatchTool --> ProcessRunner
     RunTestsTool --> ProcessRunner
     PermissionGate --> PermissionDecision
-    ToolExecutor --> ToolActionHandler : compatibility facade
     StateActionHandler --> AgentState
 
     LlmClient <|.. JsonLineLlmClient
@@ -338,6 +343,7 @@ classDiagram
     AgentState *-- TodoList
     AgentState *-- VirtualFileSystem
     AgentState *-- ContextOffloadStore
+    AgentStateRenderer --> AgentState
     TodoList *-- TodoItem
     TodoItem --> TodoStatus
 
@@ -356,6 +362,7 @@ AgentLoop          = time/control flow
 AgentRun           = one run's lifecycle state
 AgentState         = agent's inner world
 Action             = typed model/runtime protocol
+ActionCatalog      = tested model-visible protocol examples
 ContextManager     = attention/context boundary
 Prompt             = structured prompt sections
 ActionDispatcher   = action family routing
@@ -365,7 +372,6 @@ ToolRegistry       = available workspace capabilities
 PermissionGate     = risk boundary before tool execution
 ToolActionHandler  = side-effect execution boundary
 ProcessRunner      = command process adapter
-ToolExecutor       = optional compatibility facade, outside main loop
 LlmClient          = model boundary
 TrajectoryLogger   = trace boundary
 ```
@@ -375,9 +381,9 @@ TrajectoryLogger   = trace boundary
 - `AgentLoop` no longer branches over every concrete action.
 - `AgentLoop` depends on `ContextManager`, not a string-building concrete class.
 - Prompt sections are represented by `Prompt` and independent renderers.
+- `ActionCatalog` keeps `@JsonSubTypes` and model-visible examples in sync.
 - The main runtime path now goes through `ToolActionHandler`, `ToolRegistry`, and `PermissionGate` directly.
-- `ToolExecutor` only accepts `ToolAction` and remains outside the main loop as an optional compatibility facade.
 - `ProcessRunner` centralizes process timeout, stdin, and stdout/stderr capture for command-backed tools.
-- `AgentState` no longer accepts action records; state mutation semantics moved to `StateActionHandler`.
+- `AgentState` no longer accepts action records or renders prompt text; state mutation lives in `StateActionHandler`, and state presentation lives in `AgentStateRenderer`.
 - `AgentRun` owns history, state, step budget, and run result construction.
 - The Java sealed hierarchy now expresses action ontology directly.

@@ -1,8 +1,13 @@
 package io.github.seasonsolt.sacagent4j.agent;
 
+import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.seasonsolt.sacagent4j.plan.TodoStatus;
 import org.junit.jupiter.api.Test;
+
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -51,5 +56,36 @@ class ActionJsonTest {
         String json = objectMapper.writeValueAsString(new Action.Finish("done"));
         assertTrue(new Action.Finish("done") instanceof Action.ControlAction);
         assertEquals("{\"type\":\"finish\",\"summary\":\"done\"}", json);
+    }
+
+    @Test
+    void actionCatalogExamplesCoverEveryJsonSubtype() throws Exception {
+        Map<Class<? extends Action>, String> runtimeTypes = runtimeTypesByClass();
+        Map<Class<? extends Action>, String> catalogTypes = ActionCatalog.examples().stream()
+                .collect(Collectors.toMap(
+                        ActionCatalog.Example::actionClass,
+                        ActionCatalog.Example::type,
+                        (left, right) -> left,
+                        LinkedHashMap::new
+                ));
+
+        assertEquals(runtimeTypes, catalogTypes);
+        for (ActionCatalog.Example example : ActionCatalog.examples()) {
+            String json = objectMapper.writeValueAsString(example.action());
+            Action parsed = objectMapper.readValue(json, Action.class);
+            assertEquals(example.actionClass(), parsed.getClass());
+            assertTrue(json.contains("\"type\":\"" + example.type() + "\""));
+        }
+    }
+
+    private static Map<Class<? extends Action>, String> runtimeTypesByClass() {
+        JsonSubTypes subTypes = Action.class.getAnnotation(JsonSubTypes.class);
+        Map<Class<? extends Action>, String> result = new LinkedHashMap<>();
+        for (JsonSubTypes.Type type : subTypes.value()) {
+            @SuppressWarnings("unchecked")
+            Class<? extends Action> actionClass = (Class<? extends Action>) type.value();
+            result.put(actionClass, type.name());
+        }
+        return result;
     }
 }

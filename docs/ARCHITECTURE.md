@@ -56,6 +56,7 @@ Main
 | `ContextManager` | Port for building structured prompts from `AgentRun`. |
 | `Prompt` | Structured prompt sections with final string rendering. |
 | `DefaultContextManager` | Composes prompt section renderers. |
+| `ActionCatalog` | Keeps runtime JSON subtype names and model-visible action examples synchronized. |
 | `Action` | Sealed action protocol between model and Java runtime. |
 | `Observation` | Tool/state execution result. |
 | `Turn` | One action/observation pair in the trajectory. |
@@ -67,7 +68,6 @@ Main
 | `ToolRegistry` | Registry of concrete workspace tools. |
 | `Tool` | One executable workspace capability with name and risk level. |
 | `PermissionGate` | Boundary that can approve/reject risky tool actions before execution. |
-| `ToolExecutor` | Optional compatibility facade over the registry/gate pipeline; not used by `AgentLoop` or CLI composition. |
 | `ToolPolicy` | Shell safety policy used by the default permission gate. |
 | `Workspace` | Path boundary and workspace file resolution. |
 | `TrajectoryLogger` | Port for recording run events. |
@@ -131,9 +131,22 @@ Action
 
 This lets the runtime route by action family instead of branching over every concrete record in `AgentLoop`.
 
+## Action protocol catalog
+
+The model-visible protocol is now derived from `ActionCatalog` instead of being hand-written in `ActionProtocolRenderer`.
+
+```text
+Action.java @JsonSubTypes
+  -> ActionCatalog.runtimeTypesByClass()
+  -> ActionCatalog.examples()
+  -> ActionProtocolRenderer
+```
+
+Tests assert that every runtime JSON subtype has a catalog example, and every catalog example round-trips through Jackson. Adding a new action therefore requires updating `Action.java` and adding a deliberate example; otherwise the test suite fails before prompt/runtime drift can ship.
+
 ## Tool boundary
 
-Tool execution is no longer a single switch hidden inside `ToolExecutor`, and the main runtime path no longer routes through that compatibility facade. The active shape is:
+Tool execution is no longer a single switch or facade. The active shape is:
 
 ```text
 ActionDispatcher
@@ -144,8 +157,6 @@ ActionDispatcher
             -> DefaultPermissionGate
                  -> ToolPolicy for command-backed medium/high-risk tools
 ```
-
-`ToolExecutor` remains as a small convenience facade for older tests or direct callers, but the design center and CLI path are now registry + gate. This fixes the previous half-refactor where the class diagram claimed `ToolActionHandler` was central but `AgentLoop` still reached it through `ToolExecutor`.
 
 ## Current design strengths
 
@@ -161,9 +172,9 @@ ActionDispatcher
 
 These are intentional review targets, not emergencies.
 
-### 1. AgentState still renders itself
+### 1. AgentState is pure state
 
-`AgentState` now no longer handles action records, but it still renders its own prompt summary. A future `AgentStateRenderer` could make state purely data.
+`AgentState` owns the todo list, virtual filesystem, and context offload store, but prompt-facing formatting lives in `AgentStateRenderer`. This keeps the state model free of `StringBuilder`/presentation logic while preserving a compact prompt summary.
 
 ### 2. Action taxonomy is improved but still nested in one file
 
@@ -276,6 +287,10 @@ Use these questions before adding new features:
 | Done | Remove prompt compatibility facade | Deleted `ContextBuilder` / `ContextManagers`; `ContextManager` is the only prompt seam. |
 | Done | Merge decision types | `ToolPolicy` now returns `PermissionDecision`; `PolicyDecision` is gone. |
 | Done | Add `ProcessRunner` | Shared timeout/stdout/stderr/stdin handling across shell, tests, and patch tools. |
+| Done | Add `ActionCatalog` | Runtime JSON subtypes and prompt examples are covered by one tested catalog. |
+| Done | Move state rendering out of `AgentState` | `AgentStateRenderer` owns prompt formatting; state remains data. |
+| Done | Remove `ToolExecutor` | Tests and examples use `ToolActionHandler` directly; no facade remains. |
+| Done | Report unreadable search files | `ToolSupport.literalSearch` counts skipped unreadable files instead of swallowing exceptions silently. |
 | P2 | Add checkpoint/persistence seam | Move beyond in-memory state when needed. |
 
 ## Relationship to LangChain Deep Agents / pi-style coding agents
@@ -291,7 +306,6 @@ Use these questions before adding new features:
 | Context offload | `ContextOffloadStore` |
 | Planning | `TodoList` |
 | Tool registry / side-effect boundary | `ToolActionHandler` + `ToolRegistry` + `PermissionGate` |
-| Compatibility tool facade | `ToolExecutor` |
 | Safety policy | `ToolPolicy` |
 | Tracing | `TrajectoryLogger` |
 
