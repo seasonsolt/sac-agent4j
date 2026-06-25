@@ -36,21 +36,14 @@ public final class ToolExecutor {
         this.toolPolicy = toolPolicy;
     }
 
-    /** Dispatches one model action to its concrete tool implementation. */
-    public Observation execute(Action action) throws Exception {
+    /** Dispatches one workspace tool action to its concrete implementation. */
+    public Observation execute(Action.ToolAction action) throws Exception {
         return switch (action) {
-            case Action.SetPlan ignored -> Observation.failed("set_plan is handled by AgentLoop");
-            case Action.UpdateTodo ignored -> Observation.failed("update_todo is handled by AgentLoop");
-            case Action.WriteVirtualFile ignored -> Observation.failed("write_virtual_file is handled by AgentLoop");
-            case Action.ReadVirtualFile ignored -> Observation.failed("read_virtual_file is handled by AgentLoop");
-            case Action.OffloadContext ignored -> Observation.failed("offload_context is handled by AgentLoop");
-            case Action.ReadContext ignored -> Observation.failed("read_context is handled by AgentLoop");
             case Action.ReadFile readFile -> readFile(readFile.path());
             case Action.Search search -> search(search.query());
             case Action.Shell shell -> shell(shell.command());
             case Action.ApplyPatch applyPatch -> applyPatch(applyPatch.patch());
             case Action.RunTests ignored -> shell(testCommand);
-            case Action.Finish ignored -> Observation.ok("");
         };
     }
 

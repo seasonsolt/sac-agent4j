@@ -7,36 +7,37 @@ import io.github.seasonsolt.sacagent4j.tool.ToolExecutor;
 import io.github.seasonsolt.sacagent4j.trajectory.NoopTrajectoryLogger;
 import io.github.seasonsolt.sacagent4j.trajectory.TrajectoryLogger;
 
-import java.util.ArrayList;
 import java.util.List;
 
 /**
  * The minimal SWE-agent control loop.
  *
- * <p>The loop is deliberately boring: build context, ask the LLM for one
- * {@link Action}, execute it, append the {@link Observation}, repeat until
- * {@code finish} or {@code maxSteps}. This is the core mechanism that larger
- * coding agents hide behind planners, event streams, or framework callbacks.</p>
+ * <p>The loop now owns only time/control flow: build context, ask the LLM for
+ * one {@link Action}, dispatch non-terminal actions, record the turn, and stop
+ * on {@code finish} or step exhaustion.</p>
  */
 public final class AgentLoop {
     private final LlmClient llmClient;
-    private final ToolExecutor toolExecutor;
+    private final ActionDispatcher actionDispatcher;
     private final ContextBuilder contextBuilder;
     private final int maxSteps;
     private final TrajectoryLogger trajectoryLogger;
-    private final List<Turn> history = new ArrayList<>();
-    private final AgentState agentState = new AgentState();
+    private AgentRun lastRun;
 
     public AgentLoop(LlmClient llmClient, ToolExecutor toolExecutor, ContextBuilder contextBuilder, int maxSteps) {
-        this(llmClient, toolExecutor, contextBuilder, maxSteps, new NoopTrajectoryLogger());
+        this(llmClient, new ActionDispatcher(new StateActionHandler(), toolExecutor), contextBuilder, maxSteps, new NoopTrajectoryLogger());
     }
 
     public AgentLoop(LlmClient llmClient, ToolExecutor toolExecutor, ContextBuilder contextBuilder, int maxSteps, TrajectoryLogger trajectoryLogger) {
+        this(llmClient, new ActionDispatcher(new StateActionHandler(), toolExecutor), contextBuilder, maxSteps, trajectoryLogger);
+    }
+
+    public AgentLoop(LlmClient llmClient, ActionDispatcher actionDispatcher, ContextBuilder contextBuilder, int maxSteps, TrajectoryLogger trajectoryLogger) {
         if (maxSteps <= 0) {
             throw new IllegalArgumentException("maxSteps must be positive");
         }
         this.llmClient = llmClient;
-        this.toolExecutor = toolExecutor;
+        this.actionDispatcher = actionDispatcher;
         this.contextBuilder = contextBuilder;
         this.maxSteps = maxSteps;
         this.trajectoryLogger = trajectoryLogger;
@@ -49,21 +50,24 @@ public final class AgentLoop {
      * @return final status and immutable turn history
      */
     public AgentResult run(String task) throws Exception {
+        AgentRun run = AgentRun.start(task, maxSteps);
+        lastRun = run;
         trajectoryLogger.started(task, maxSteps);
         try {
-            for (int step = 0; step < maxSteps; step++) {
-                String context = contextBuilder.build(task, history, agentState);
+            while (run.hasStepsRemaining()) {
+                String context = contextBuilder.build(run);
                 Action action = llmClient.nextAction(context);
                 if (action instanceof Action.Finish finish) {
-                    AgentResult result = AgentResult.finished(finish.summary(), history);
+                    AgentResult result = run.finished(finish.summary());
                     trajectoryLogger.finished(result.finished(), result.summary(), result.history().size());
                     return result;
                 }
-                Observation observation = execute(action);
-                history.add(new Turn(action, observation));
-                trajectoryLogger.turn(step, action, observation);
+                int step = run.nextStep();
+                Observation observation = actionDispatcher.dispatch(action, run);
+                Turn turn = run.record(action, observation);
+                trajectoryLogger.turn(step, turn.action(), turn.observation());
             }
-            AgentResult result = AgentResult.stopped(history);
+            AgentResult result = run.stopped();
             trajectoryLogger.finished(result.finished(), result.summary(), result.history().size());
             return result;
         } finally {
@@ -72,32 +76,10 @@ public final class AgentLoop {
     }
 
     public AgentState state() {
-        return agentState;
+        return lastRun == null ? new AgentState() : lastRun.state();
     }
 
     public List<TodoItem> plan() {
-        return agentState.plan();
-    }
-
-    private Observation execute(Action action) throws Exception {
-        if (action instanceof Action.SetPlan setPlan) {
-            return agentState.setPlan(setPlan);
-        }
-        if (action instanceof Action.UpdateTodo updateTodo) {
-            return agentState.updateTodo(updateTodo);
-        }
-        if (action instanceof Action.WriteVirtualFile writeVirtualFile) {
-            return agentState.writeVirtualFile(writeVirtualFile);
-        }
-        if (action instanceof Action.ReadVirtualFile readVirtualFile) {
-            return agentState.readVirtualFile(readVirtualFile);
-        }
-        if (action instanceof Action.OffloadContext offloadContext) {
-            return agentState.offloadContext(offloadContext);
-        }
-        if (action instanceof Action.ReadContext readContext) {
-            return agentState.readContext(readContext);
-        }
-        return toolExecutor.execute(action);
+        return state().plan();
     }
 }

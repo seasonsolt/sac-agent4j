@@ -1,7 +1,5 @@
 package io.github.seasonsolt.sacagent4j.state;
 
-import io.github.seasonsolt.sacagent4j.agent.Action;
-import io.github.seasonsolt.sacagent4j.agent.Observation;
 import io.github.seasonsolt.sacagent4j.plan.TodoItem;
 import io.github.seasonsolt.sacagent4j.plan.TodoList;
 
@@ -9,39 +7,27 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Mutable state for a single agent run.
+ * Mutable inner world for a single agent run.
  *
- * <p>This is sac-agent4j's minimal counterpart to deepagents-style state: it
- * centralizes the plan, virtual files, and context offloads so the prompt can
- * stay small while the agent still has durable handles for intermediate work.</p>
+ * <p>State owns the data structures. Action semantics live in
+ * {@link io.github.seasonsolt.sacagent4j.agent.StateActionHandler}, keeping this
+ * class closer to a state model than a dispatcher.</p>
  */
 public final class AgentState {
     private final TodoList todoList = new TodoList();
     private final VirtualFileSystem virtualFileSystem = new VirtualFileSystem();
     private final ContextOffloadStore contextOffloads = new ContextOffloadStore();
 
-    public Observation setPlan(Action.SetPlan action) {
-        return todoList.setPlan(action);
+    public TodoList todoList() {
+        return todoList;
     }
 
-    public Observation updateTodo(Action.UpdateTodo action) {
-        return todoList.updateTodo(action);
+    public VirtualFileSystem virtualFileSystem() {
+        return virtualFileSystem;
     }
 
-    public Observation writeVirtualFile(Action.WriteVirtualFile action) {
-        return virtualFileSystem.write(action.path(), action.content());
-    }
-
-    public Observation readVirtualFile(Action.ReadVirtualFile action) {
-        return virtualFileSystem.read(action.path());
-    }
-
-    public Observation offloadContext(Action.OffloadContext action) {
-        return contextOffloads.offload(action);
-    }
-
-    public Observation readContext(Action.ReadContext action) {
-        return contextOffloads.read(action.key());
+    public ContextOffloadStore contextOffloads() {
+        return contextOffloads;
     }
 
     public List<TodoItem> plan() {

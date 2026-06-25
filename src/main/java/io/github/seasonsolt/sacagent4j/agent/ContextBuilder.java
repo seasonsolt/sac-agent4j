@@ -20,6 +20,11 @@ public final class ContextBuilder {
         this.objectMapper = objectMapper;
     }
 
+    /** Builds one prompt from a complete run object. */
+    public String build(AgentRun run) throws Exception {
+        return build(run.task(), run.history(), run.state());
+    }
+
     /** Builds one prompt containing the tool protocol, task, agent state, and prior turns. */
     public String build(String task, List<Turn> history, AgentState agentState) throws Exception {
         StringBuilder context = new StringBuilder();

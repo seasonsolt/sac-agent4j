@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ActionJsonTest {
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -14,6 +15,7 @@ class ActionJsonTest {
     void parsesReadFileAction() throws Exception {
         Action action = objectMapper.readValue("{\"type\":\"read_file\",\"path\":\"README.md\"}", Action.class);
         Action.ReadFile readFile = assertInstanceOf(Action.ReadFile.class, action);
+        assertTrue(action instanceof Action.ToolAction);
         assertEquals("README.md", readFile.path());
     }
 
@@ -21,6 +23,7 @@ class ActionJsonTest {
     void parsesPlanActions() throws Exception {
         Action setPlanAction = objectMapper.readValue("{\"type\":\"set_plan\",\"items\":[\"inspect\",\"patch\"]}", Action.class);
         Action.SetPlan setPlan = assertInstanceOf(Action.SetPlan.class, setPlanAction);
+        assertTrue(setPlanAction instanceof Action.StateAction);
         assertEquals(2, setPlan.items().size());
 
         Action updateAction = objectMapper.readValue("{\"type\":\"update_todo\",\"id\":1,\"status\":\"in_progress\"}", Action.class);
@@ -46,6 +49,7 @@ class ActionJsonTest {
     @Test
     void writesFinishAction() throws Exception {
         String json = objectMapper.writeValueAsString(new Action.Finish("done"));
+        assertTrue(new Action.Finish("done") instanceof Action.ControlAction);
         assertEquals("{\"type\":\"finish\",\"summary\":\"done\"}", json);
     }
 }

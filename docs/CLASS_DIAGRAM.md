@@ -1,8 +1,8 @@
 # sac-agent4j Class Diagram
 
-This diagram records the current class shape after adding `AgentState`, virtual files, context offload, plan/todo actions, tool policy, and trajectory logging.
+This diagram records the class shape after the OO refactor that introduced `AgentRun`, `ActionDispatcher`, `StateActionHandler`, and the `ControlAction` / `StateAction` / `ToolAction` hierarchy.
 
-For architectural commentary and the next proposed OO refinement, see [`ARCHITECTURE.md`](./ARCHITECTURE.md).
+For architectural commentary, see [`ARCHITECTURE.md`](./ARCHITECTURE.md).
 
 ```mermaid
 classDiagram
@@ -15,20 +15,42 @@ classDiagram
 
     class AgentLoop {
       -LlmClient llmClient
-      -ToolExecutor toolExecutor
+      -ActionDispatcher actionDispatcher
       -ContextBuilder contextBuilder
       -TrajectoryLogger trajectoryLogger
-      -AgentState agentState
-      -List~Turn~ history
       -int maxSteps
+      -AgentRun lastRun
       +run(task) AgentResult
       +state() AgentState
       +plan() List~TodoItem~
-      -execute(action) Observation
+    }
+
+    class AgentRun {
+      -String task
+      -int maxSteps
+      -AgentState state
+      -List~Turn~ history
+      -int nextStep
+      +start(task, maxSteps) AgentRun
+      +hasStepsRemaining() boolean
+      +record(action, observation) Turn
+      +finished(summary) AgentResult
+      +stopped() AgentResult
+    }
+
+    class ActionDispatcher {
+      -StateActionHandler stateActionHandler
+      -ToolExecutor toolExecutor
+      +dispatch(action, run) Observation
+    }
+
+    class StateActionHandler {
+      +execute(stateAction, state) Observation
     }
 
     class ContextBuilder {
       -ObjectMapper objectMapper
+      +build(run) String
       +build(task, history, agentState) String
       -renderTurnForPrompt(turn) String
     }
@@ -43,6 +65,18 @@ classDiagram
     class ScriptedLlmClient
 
     class Action {
+      <<sealed interface>>
+    }
+
+    class ControlAction {
+      <<sealed interface>>
+    }
+
+    class StateAction {
+      <<sealed interface>>
+    }
+
+    class ToolAction {
       <<sealed interface>>
     }
 
@@ -81,20 +115,17 @@ classDiagram
       -TodoList todoList
       -VirtualFileSystem virtualFileSystem
       -ContextOffloadStore contextOffloads
-      +setPlan(action) Observation
-      +updateTodo(action) Observation
-      +writeVirtualFile(action) Observation
-      +readVirtualFile(action) Observation
-      +offloadContext(action) Observation
-      +readContext(action) Observation
+      +todoList() TodoList
+      +virtualFileSystem() VirtualFileSystem
+      +contextOffloads() ContextOffloadStore
       +plan() List~TodoItem~
       +renderStateSummary() String
     }
 
     class TodoList {
       -List~TodoItem~ items
-      +setPlan(action) Observation
-      +updateTodo(action) Observation
+      +setPlan(items) Observation
+      +updateTodo(id, status) Observation
       +items() List~TodoItem~
       +render() String
     }
@@ -118,32 +149,25 @@ classDiagram
       +write(path, content) Observation
       +read(path) Observation
       +summary() Map~String,Integer~
-      -normalize(path) String
     }
 
     class ContextOffloadStore {
       -Map~String,Entry~ entries
       -int nextId
-      +offload(action) Observation
+      +offload(key, title, content) Observation
       +read(key) Observation
       +summary() Map~String,String~
-    }
-
-    class ContextOffloadEntry {
-      +String key
-      +String title
-      +String content
     }
 
     class ToolExecutor {
       -Workspace workspace
       -String testCommand
       -ToolPolicy toolPolicy
-      +execute(action) Observation
-      -readFile(path) Observation
-      -search(query) Observation
-      -shell(command) Observation
-      -applyPatch(patch) Observation
+      +execute(toolAction) Observation
+      +readFile(path) Observation
+      +search(query) Observation
+      +shell(command) Observation
+      +applyPatch(patch) Observation
     }
 
     class ToolPolicy {
@@ -156,8 +180,6 @@ classDiagram
     class PolicyDecision {
       +boolean allowed
       +String reason
-      +allow() PolicyDecision
-      +deny(reason) PolicyDecision
     }
 
     class Workspace {
@@ -165,7 +187,6 @@ classDiagram
       +root() Path
       +resolveExisting(path) Path
       +resolveForWrite(path) Path
-      -resolveInside(path) Path
     }
 
     class TrajectoryLogger {
@@ -176,41 +197,43 @@ classDiagram
       +close()
     }
 
-    class JsonlTrajectoryLogger {
-      -ObjectMapper objectMapper
-      -BufferedWriter writer
-      -Path path
-      +path() Path
-      -actionForLog(action) ObjectNode
-    }
-
+    class JsonlTrajectoryLogger
     class NoopTrajectoryLogger
 
     Main --> AgentLoop : wires
+    AgentLoop --> AgentRun : starts/advances
     AgentLoop --> LlmClient : asks next action
     AgentLoop --> ContextBuilder : builds prompt
-    AgentLoop --> ToolExecutor : executes workspace tools
-    AgentLoop --> AgentState : executes state actions
+    AgentLoop --> ActionDispatcher : dispatches non-terminal actions
     AgentLoop --> TrajectoryLogger : records events
-    AgentLoop --> Turn : appends
-    AgentLoop --> AgentResult : returns
+
+    AgentRun *-- AgentState
+    AgentRun *-- Turn
+    AgentRun --> AgentResult
+
+    ActionDispatcher --> StateActionHandler
+    ActionDispatcher --> ToolExecutor
+    StateActionHandler --> AgentState
 
     LlmClient <|.. JsonLineLlmClient
     LlmClient <|.. OpenAiCompatibleLlmClient
     LlmClient <|.. ScriptedLlmClient
 
-    Action <|.. SetPlan
-    Action <|.. UpdateTodo
-    Action <|.. WriteVirtualFile
-    Action <|.. ReadVirtualFile
-    Action <|.. OffloadContext
-    Action <|.. ReadContext
-    Action <|.. ReadFile
-    Action <|.. Search
-    Action <|.. Shell
-    Action <|.. ApplyPatch
-    Action <|.. RunTests
-    Action <|.. Finish
+    Action <|-- ControlAction
+    Action <|-- StateAction
+    Action <|-- ToolAction
+    ControlAction <|.. Finish
+    StateAction <|.. SetPlan
+    StateAction <|.. UpdateTodo
+    StateAction <|.. WriteVirtualFile
+    StateAction <|.. ReadVirtualFile
+    StateAction <|.. OffloadContext
+    StateAction <|.. ReadContext
+    ToolAction <|.. ReadFile
+    ToolAction <|.. Search
+    ToolAction <|.. Shell
+    ToolAction <|.. ApplyPatch
+    ToolAction <|.. RunTests
 
     Turn --> Action
     Turn --> Observation
@@ -220,7 +243,6 @@ classDiagram
     AgentState *-- ContextOffloadStore
     TodoList *-- TodoItem
     TodoItem --> TodoStatus
-    ContextOffloadStore *-- ContextOffloadEntry
 
     ToolExecutor --> Workspace
     ToolExecutor --> ToolPolicy
@@ -230,92 +252,24 @@ classDiagram
     TrajectoryLogger <|.. NoopTrajectoryLogger
 ```
 
-## Proposed next class diagram
-
-This is the recommended next OO refinement before adding heavier features such as subagents, skills, HITL, or checkpointing.
-
-```mermaid
-classDiagram
-    direction LR
-
-    class AgentLoop {
-      -LlmClient llmClient
-      -ContextBuilder contextBuilder
-      -ActionDispatcher actionDispatcher
-      -TrajectoryLogger trajectoryLogger
-      +run(task) AgentResult
-    }
-
-    class AgentRun {
-      -String task
-      -AgentState state
-      -List~Turn~ history
-      -int maxSteps
-      -int currentStep
-      +state() AgentState
-      +history() List~Turn~
-      +append(turn)
-      +hasStepsRemaining() boolean
-      +finish(summary) AgentResult
-      +stopped() AgentResult
-    }
-
-    class AgentState {
-      -TodoList todoList
-      -VirtualFileSystem virtualFileSystem
-      -ContextOffloadStore contextOffloads
-      +renderStateSummary() String
-    }
-
-    class ActionDispatcher {
-      -StateActionHandler stateActionHandler
-      -ToolExecutor toolExecutor
-      +execute(action, run) Observation
-    }
-
-    class StateActionHandler {
-      +execute(action, state) Observation
-    }
-
-    class ToolExecutor {
-      +execute(toolAction) Observation
-    }
-
-    class ContextBuilder {
-      +build(run) String
-    }
-
-    class LlmClient {
-      <<interface>>
-      +nextAction(context) Action
-    }
-
-    class TrajectoryLogger {
-      <<interface>>
-    }
-
-    AgentLoop --> AgentRun
-    AgentLoop --> LlmClient
-    AgentLoop --> ContextBuilder
-    AgentLoop --> ActionDispatcher
-    AgentLoop --> TrajectoryLogger
-
-    AgentRun *-- AgentState
-    AgentRun *-- Turn
-
-    ActionDispatcher --> StateActionHandler
-    ActionDispatcher --> ToolExecutor
-    StateActionHandler --> AgentState
-    ContextBuilder --> AgentRun
-```
-
-The intended responsibility split is:
+## Responsibility split
 
 ```text
-AgentLoop        = time/control flow
-AgentRun         = one run's lifecycle state
-AgentState       = agent's inner world
-ActionDispatcher = action routing
+AgentLoop          = time/control flow
+AgentRun           = one run's lifecycle state
+AgentState         = agent's inner world
+Action             = typed model/runtime protocol
+ActionDispatcher   = action family routing
 StateActionHandler = state mutation/read semantics
-ToolExecutor     = external workspace/tool side effects
+ToolExecutor       = external workspace/tool side effects
+LlmClient          = model boundary
+TrajectoryLogger   = trace boundary
 ```
+
+## Why this is more OO than the previous shape
+
+- `AgentLoop` no longer branches over every concrete action.
+- `ToolExecutor` only accepts `ToolAction`; it no longer knows about state actions.
+- `AgentState` no longer accepts action records; state mutation semantics moved to `StateActionHandler`.
+- `AgentRun` owns history, state, step budget, and run result construction.
+- The Java sealed hierarchy now expresses action ontology directly.

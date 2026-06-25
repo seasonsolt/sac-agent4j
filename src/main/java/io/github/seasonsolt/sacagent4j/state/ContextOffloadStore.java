@@ -1,6 +1,5 @@
 package io.github.seasonsolt.sacagent4j.state;
 
-import io.github.seasonsolt.sacagent4j.agent.Action;
 import io.github.seasonsolt.sacagent4j.agent.Observation;
 
 import java.util.LinkedHashMap;
@@ -13,16 +12,16 @@ public final class ContextOffloadStore {
     private final Map<String, Entry> entries = new LinkedHashMap<>();
     private int nextId = 1;
 
-    public Observation offload(Action.OffloadContext action) {
-        String key = action.key();
+    public Observation offload(String requestedKey, String requestedTitle, String requestedContent) {
+        String key = requestedKey;
         if (key == null || key.isBlank()) {
             key = "ctx-" + nextId++;
         }
         if (!key.matches("[A-Za-z0-9._-]+")) {
             return Observation.failed("invalid context key: " + key);
         }
-        String title = action.title() == null || action.title().isBlank() ? key : action.title();
-        String content = action.content() == null ? "" : action.content();
+        String title = requestedTitle == null || requestedTitle.isBlank() ? key : requestedTitle;
+        String content = requestedContent == null ? "" : requestedContent;
         entries.put(key, new Entry(key, title, content));
         return Observation.ok("context offloaded: " + key + " (" + content.length() + " chars)");
     }

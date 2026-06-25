@@ -25,12 +25,14 @@ The architectural goal is object-oriented clarity:
 ```text
 Main
   -> AgentLoop.run(task)
-       -> ContextBuilder.build(task, history, AgentState)
+       -> AgentRun.start(task, maxSteps)
+       -> ContextBuilder.build(AgentRun)
        -> LlmClient.nextAction(context)
-       -> AgentLoop dispatches Action
-            -> AgentState for state actions
-            -> ToolExecutor for workspace/tool actions
-       -> append Turn(Action, Observation)
+       -> AgentLoop handles finish
+       -> ActionDispatcher.dispatch(action, AgentRun)
+            -> StateActionHandler for StateAction
+            -> ToolExecutor for ToolAction
+       -> AgentRun.record(Action, Observation)
        -> TrajectoryLogger.turn(...)
        -> finish or continue
 ```
@@ -39,13 +41,16 @@ Main
 
 | Abstraction | Responsibility |
 |---|---|
-| `AgentLoop` | Owns the step loop and currently dispatches actions. |
+| `AgentLoop` | Owns only the step loop and terminal control flow. |
 | `LlmClient` | Port for model decision-making. |
 | `ContextBuilder` | Renders task, action protocol, state summary, and history into the prompt. |
 | `Action` | Sealed action protocol between model and Java runtime. |
 | `Observation` | Tool/state execution result. |
 | `Turn` | One action/observation pair in the trajectory. |
-| `AgentState` | Per-run state root. Holds todo list, virtual files, and context offloads. |
+| `AgentRun` | One run lifecycle: task, step budget, history, and state. |
+| `AgentState` | Per-run inner-world state root. Holds todo list, virtual files, and context offloads. |
+| `ActionDispatcher` | Routes non-terminal actions by action family. |
+| `StateActionHandler` | Applies state action semantics to `AgentState`. |
 | `ToolExecutor` | Executes real workspace tools: read/search/shell/patch/tests. |
 | `ToolPolicy` | Shell safety policy. |
 | `Workspace` | Path boundary and workspace file resolution. |
@@ -93,40 +98,22 @@ This is the smallest current equivalent of Deep Agents-style filesystem/context-
 
 ## Current action groups
 
-The current `Action` sealed interface is flat:
+The current `Action` sealed interface is now explicitly grouped:
 
 ```text
 Action
-  ├── set_plan / update_todo
-  ├── write_virtual_file / read_virtual_file
-  ├── offload_context / read_context
-  ├── read_file / search / shell / apply_patch / run_tests
-  └── finish
+  ├── ControlAction
+  │   └── finish
+  ├── StateAction
+  │   ├── set_plan / update_todo
+  │   ├── write_virtual_file / read_virtual_file
+  │   └── offload_context / read_context
+  └── ToolAction
+      ├── read_file / search
+      └── shell / apply_patch / run_tests
 ```
 
-Conceptually, these belong to three families:
-
-```text
-ControlAction
-  └── finish
-
-StateAction
-  ├── set_plan
-  ├── update_todo
-  ├── write_virtual_file
-  ├── read_virtual_file
-  ├── offload_context
-  └── read_context
-
-ToolAction
-  ├── read_file
-  ├── search
-  ├── shell
-  ├── apply_patch
-  └── run_tests
-```
-
-The code has not yet split the sealed hierarchy this way, but this is the likely next architectural refinement.
+This lets `ToolExecutor` accept only `ToolAction`, while `StateActionHandler` accepts only `StateAction`.
 
 ## Current design strengths
 
@@ -142,53 +129,21 @@ The code has not yet split the sealed hierarchy this way, but this is the likely
 
 These are intentional review targets, not emergencies.
 
-### 1. AgentLoop knows too much about action dispatch
+### 1. ContextBuilder is still a string-building concentration point
 
-`AgentLoop` currently branches on concrete action types:
+`ContextBuilder` currently renders protocol, task, state summary, and history in one class. This is acceptable for the MVP, but it may eventually want section renderers.
 
-```text
-if SetPlan -> AgentState
-if UpdateTodo -> AgentState
-if WriteVirtualFile -> AgentState
-...
-else -> ToolExecutor
-```
+### 2. AgentState still renders itself
 
-This makes the loop responsible for both time/control flow and routing.
+`AgentState` now no longer handles action records, but it still renders its own prompt summary. A future `AgentStateRenderer` could make state purely data.
 
-### 2. ToolExecutor knows actions it should not handle
+### 3. Action taxonomy is improved but still nested in one file
 
-`ToolExecutor` has cases like:
+The sealed hierarchy is now explicit, but all action records still live in `Action.java`. This keeps the MVP compact; later, each action family could move into its own package.
 
-```text
-set_plan is handled by AgentLoop
-write_virtual_file is handled by AgentLoop
-```
+## Current refined class shape
 
-That means the tool executor knows too much about the global protocol.
-
-### 3. AgentState mutates itself from action records
-
-`AgentState` currently exposes methods such as:
-
-```text
-setPlan(Action.SetPlan)
-writeVirtualFile(Action.WriteVirtualFile)
-offloadContext(Action.OffloadContext)
-```
-
-This is practical, but philosophically the state object is also acting as an action handler.
-
-A cleaner split would be:
-
-```text
-AgentState = what the state is
-StateActionHandler = how state actions mutate/read state
-```
-
-## Desired next class shape
-
-The next OO refinement should introduce a small set of classes, not a framework:
+The first OO refinement has been applied:
 
 ```text
 AgentLoop
@@ -212,20 +167,16 @@ ActionDispatcher
 Represents one execution lifetime:
 
 ```text
-AgentRun = task metadata + max steps + AgentState + history
+AgentRun = task metadata + max steps + AgentState + history + next step
 ```
-
-This would move `history`, `AgentState`, and run limits out of `AgentLoop`.
 
 ### ActionDispatcher
 
-Owns action routing:
+Owns non-terminal action routing:
 
 ```text
-ActionDispatcher.execute(action, run) -> Observation
+ActionDispatcher.dispatch(action, run) -> Observation
 ```
-
-Then `AgentLoop` no longer needs to know the concrete action taxonomy.
 
 ### StateActionHandler
 
@@ -234,8 +185,6 @@ Owns state action semantics:
 ```text
 StateActionHandler.execute(StateAction, AgentState) -> Observation
 ```
-
-This allows `AgentState` to become more of a state model and less of a dispatcher.
 
 ## Desired future loop
 
@@ -282,10 +231,10 @@ Use these questions before adding new features:
 
 | Priority | Change | Why |
 |---|---|---|
-| P0 | Introduce `AgentRun` | Centralize per-run lifecycle state. |
-| P0 | Introduce `ActionDispatcher` | Remove action routing from `AgentLoop`. |
-| P1 | Introduce `StateActionHandler` | Make `AgentState` closer to pure state. |
-| P1 | Split conceptual action groups | Prepare for subagents, skills, HITL, checkpointing. |
+| Done | Introduce `AgentRun` | Centralized per-run lifecycle state. |
+| Done | Introduce `ActionDispatcher` | Removed action routing from `AgentLoop`. |
+| Done | Introduce `StateActionHandler` | Made `AgentState` closer to pure state. |
+| Done | Split conceptual action groups | Added `ControlAction`, `StateAction`, and `ToolAction`. |
 | P2 | Split prompt rendering sections | Keep `ContextBuilder` from becoming a string-building god object. |
 | P2 | Add checkpoint/persistence seam | Move beyond in-memory state when needed. |
 
