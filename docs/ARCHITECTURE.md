@@ -54,8 +54,12 @@ Main
 | `AgentState` | Per-run inner-world state root. Holds todo list, virtual files, and context offloads. |
 | `ActionDispatcher` | Routes non-terminal actions by action family. |
 | `StateActionHandler` | Applies state action semantics to `AgentState`. |
-| `ToolExecutor` | Executes real workspace tools: read/search/shell/patch/tests. |
-| `ToolPolicy` | Shell safety policy. |
+| `ToolActionHandler` | Routes tool actions through registry lookup and permission checking. |
+| `ToolRegistry` | Registry of concrete workspace tools. |
+| `Tool` | One executable workspace capability with name and risk level. |
+| `PermissionGate` | Boundary that can approve/reject risky tool actions before execution. |
+| `ToolExecutor` | Backward-compatible facade over the registry/gate pipeline. |
+| `ToolPolicy` | Shell safety policy used by the default permission gate. |
 | `Workspace` | Path boundary and workspace file resolution. |
 | `TrajectoryLogger` | Port for recording run events. |
 
@@ -118,13 +122,32 @@ Action
 
 This lets `ToolExecutor` accept only `ToolAction`, while `StateActionHandler` accepts only `StateAction`.
 
+
+## Tool boundary
+
+Tool execution is no longer a single switch hidden inside `ToolExecutor`. The active shape is:
+
+```text
+ToolActionHandler
+  ├── ToolRegistry
+  │   ├── ReadFileTool
+  │   ├── SearchTool
+  │   ├── ShellTool
+  │   ├── ApplyPatchTool
+  │   └── RunTestsTool
+  └── PermissionGate
+      └── DefaultPermissionGate -> ToolPolicy for shell-like actions
+```
+
+`ToolExecutor` remains as a compatibility facade for older callers, but the design center is now registry + gate. This follows the practical lesson from mature agent harnesses: tool growth and risk management need explicit seams, but the first version should stay local and inspectable.
+
 ## Current design strengths
 
 1. **Explicit loop** — the agent mechanism is easy to read.
 2. **Typed protocol** — actions are Java records under a sealed interface.
 3. **Small model seam** — `LlmClient` makes model providers replaceable.
 4. **State root exists** — `AgentState` prevents state from scattering further.
-5. **Tool boundary exists** — real side effects are mostly inside `ToolExecutor` / `Workspace` / `ToolPolicy`.
+5. **Tool boundary exists** — real side effects pass through `ToolRegistry` / `PermissionGate` / `Workspace` / `ToolPolicy`.
 6. **Tracing exists** — `TrajectoryLogger` records inspectable JSONL events.
 7. **Offline demo exists** — scripted toy Java bug demo verifies the end-to-end loop without API keys.
 
@@ -235,6 +258,7 @@ Use these questions before adding new features:
 | Done | Introduce `StateActionHandler` | Made `AgentState` closer to pure state. |
 | Done | Split conceptual action groups | Added `ControlAction`, `StateAction`, and `ToolAction`. |
 | Done | Split prompt rendering sections | Added `ContextManager`, structured `Prompt`, and section renderers. |
+| Done | Add `ToolRegistry` + `PermissionGate` | Tool growth and risk gating now have explicit seams. |
 | P2 | Add checkpoint/persistence seam | Move beyond in-memory state when needed. |
 
 ## Relationship to LangChain Deep Agents / pi-style coding agents

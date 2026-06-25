@@ -186,10 +186,61 @@ classDiagram
       +summary() Map~String,String~
     }
 
+    class ToolActionHandler {
+      -ToolRegistry registry
+      -PermissionGate permissionGate
+      +execute(toolAction, context) Observation
+    }
+
+    class ToolRegistry {
+      -List~Tool~ tools
+      +defaultRegistry() ToolRegistry
+      +find(toolAction) Tool
+      +names() List~String~
+    }
+
+    class Tool {
+      <<interface>>
+      +name() String
+      +risk() RiskLevel
+      +supports(toolAction) boolean
+      +execute(toolAction, context) Observation
+    }
+
+    class PermissionGate {
+      <<interface>>
+      +check(tool, action, context) PermissionDecision
+    }
+
+    class DefaultPermissionGate
+
+    class PermissionDecision {
+      +boolean allowed
+      +String reason
+    }
+
+    class RiskLevel {
+      <<enum>>
+      LOW
+      MEDIUM
+      HIGH
+    }
+
+    class ToolContext {
+      +Workspace workspace
+      +String testCommand
+      +ToolPolicy toolPolicy
+    }
+
+    class ReadFileTool
+    class SearchTool
+    class ShellTool
+    class ApplyPatchTool
+    class RunTestsTool
+
     class ToolExecutor {
-      -Workspace workspace
-      -String testCommand
-      -ToolPolicy toolPolicy
+      -ToolContext context
+      -ToolActionHandler handler
       +execute(toolAction) Observation
       +readFile(path) Observation
       +search(query) Observation
@@ -247,7 +298,20 @@ classDiagram
     AgentRun --> AgentResult
 
     ActionDispatcher --> StateActionHandler
-    ActionDispatcher --> ToolExecutor
+    ActionDispatcher --> ToolActionHandler
+    ToolActionHandler --> ToolRegistry
+    ToolActionHandler --> PermissionGate
+    ToolActionHandler --> ToolContext
+    PermissionGate <|.. DefaultPermissionGate
+    ToolRegistry --> Tool
+    Tool <|.. ReadFileTool
+    Tool <|.. SearchTool
+    Tool <|.. ShellTool
+    Tool <|.. ApplyPatchTool
+    Tool <|.. RunTestsTool
+    Tool --> RiskLevel
+    PermissionGate --> PermissionDecision
+    ToolExecutor --> ToolActionHandler : compatibility facade
     StateActionHandler --> AgentState
 
     LlmClient <|.. JsonLineLlmClient
@@ -279,8 +343,8 @@ classDiagram
     TodoList *-- TodoItem
     TodoItem --> TodoStatus
 
-    ToolExecutor --> Workspace
-    ToolExecutor --> ToolPolicy
+    ToolContext --> Workspace
+    ToolContext --> ToolPolicy
     ToolPolicy --> PolicyDecision
 
     TrajectoryLogger <|.. JsonlTrajectoryLogger
@@ -298,7 +362,10 @@ ContextManager     = attention/context boundary
 Prompt             = structured prompt sections
 ActionDispatcher   = action family routing
 StateActionHandler = state mutation/read semantics
-ToolExecutor       = external workspace/tool side effects
+ToolActionHandler  = tool registry + permission gate orchestration
+ToolRegistry       = available workspace capabilities
+PermissionGate     = risk boundary before tool execution
+ToolExecutor       = compatibility facade over tool pipeline
 LlmClient          = model boundary
 TrajectoryLogger   = trace boundary
 ```
@@ -308,6 +375,7 @@ TrajectoryLogger   = trace boundary
 - `AgentLoop` no longer branches over every concrete action.
 - `AgentLoop` depends on `ContextManager`, not a string-building concrete class.
 - Prompt sections are represented by `Prompt` and independent renderers.
+- Tool execution now goes through `ToolRegistry` and `PermissionGate`; `ToolExecutor` is only a facade.
 - `ToolExecutor` only accepts `ToolAction`; it no longer knows about state actions.
 - `AgentState` no longer accepts action records; state mutation semantics moved to `StateActionHandler`.
 - `AgentRun` owns history, state, step budget, and run result construction.
