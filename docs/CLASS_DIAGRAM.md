@@ -1,6 +1,6 @@
 # sac-agent4j Class Diagram
 
-This diagram records the class shape after the OO refactor that introduced `AgentRun`, `ActionDispatcher`, `StateActionHandler`, and the `ControlAction` / `StateAction` / `ToolAction` hierarchy.
+This diagram records the class shape after introducing `AgentRun`, `ActionDispatcher`, `StateActionHandler`, the `ControlAction` / `StateAction` / `ToolAction` hierarchy, and the `ContextManager` prompt seam.
 
 For architectural commentary, see [`ARCHITECTURE.md`](./ARCHITECTURE.md).
 
@@ -16,7 +16,7 @@ classDiagram
     class AgentLoop {
       -LlmClient llmClient
       -ActionDispatcher actionDispatcher
-      -ContextBuilder contextBuilder
+      -ContextManager contextManager
       -TrajectoryLogger trajectoryLogger
       -int maxSteps
       -AgentRun lastRun
@@ -48,12 +48,39 @@ classDiagram
       +execute(stateAction, state) Observation
     }
 
+    class ContextManager {
+      <<interface>>
+      +buildPrompt(run) Prompt
+    }
+
+    class DefaultContextManager {
+      -SystemPromptRenderer systemPromptRenderer
+      -ActionProtocolRenderer actionProtocolRenderer
+      -TaskRenderer taskRenderer
+      -AgentStateRenderer agentStateRenderer
+      -HistoryRenderer historyRenderer
+      +buildPrompt(run) Prompt
+    }
+
+    class Prompt {
+      +String system
+      +String actionProtocol
+      +String task
+      +String agentState
+      +String history
+      +render() String
+    }
+
     class ContextBuilder {
-      -ObjectMapper objectMapper
       +build(run) String
       +build(task, history, agentState) String
-      -renderTurnForPrompt(turn) String
     }
+
+    class SystemPromptRenderer
+    class ActionProtocolRenderer
+    class TaskRenderer
+    class AgentStateRenderer
+    class HistoryRenderer
 
     class LlmClient {
       <<interface>>
@@ -203,7 +230,15 @@ classDiagram
     Main --> AgentLoop : wires
     AgentLoop --> AgentRun : starts/advances
     AgentLoop --> LlmClient : asks next action
-    AgentLoop --> ContextBuilder : builds prompt
+    AgentLoop --> ContextManager : builds prompt
+    ContextManager <|.. DefaultContextManager
+    DefaultContextManager --> Prompt
+    DefaultContextManager --> SystemPromptRenderer
+    DefaultContextManager --> ActionProtocolRenderer
+    DefaultContextManager --> TaskRenderer
+    DefaultContextManager --> AgentStateRenderer
+    DefaultContextManager --> HistoryRenderer
+    ContextBuilder --> DefaultContextManager : compatibility facade
     AgentLoop --> ActionDispatcher : dispatches non-terminal actions
     AgentLoop --> TrajectoryLogger : records events
 
@@ -259,6 +294,8 @@ AgentLoop          = time/control flow
 AgentRun           = one run's lifecycle state
 AgentState         = agent's inner world
 Action             = typed model/runtime protocol
+ContextManager     = attention/context boundary
+Prompt             = structured prompt sections
 ActionDispatcher   = action family routing
 StateActionHandler = state mutation/read semantics
 ToolExecutor       = external workspace/tool side effects
@@ -269,6 +306,8 @@ TrajectoryLogger   = trace boundary
 ## Why this is more OO than the previous shape
 
 - `AgentLoop` no longer branches over every concrete action.
+- `AgentLoop` depends on `ContextManager`, not a string-building concrete class.
+- Prompt sections are represented by `Prompt` and independent renderers.
 - `ToolExecutor` only accepts `ToolAction`; it no longer knows about state actions.
 - `AgentState` no longer accepts action records; state mutation semantics moved to `StateActionHandler`.
 - `AgentRun` owns history, state, step budget, and run result construction.

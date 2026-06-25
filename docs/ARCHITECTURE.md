@@ -26,7 +26,7 @@ The architectural goal is object-oriented clarity:
 Main
   -> AgentLoop.run(task)
        -> AgentRun.start(task, maxSteps)
-       -> ContextBuilder.build(AgentRun)
+       -> ContextManager.buildPrompt(AgentRun).render()
        -> LlmClient.nextAction(context)
        -> AgentLoop handles finish
        -> ActionDispatcher.dispatch(action, AgentRun)
@@ -43,7 +43,10 @@ Main
 |---|---|
 | `AgentLoop` | Owns only the step loop and terminal control flow. |
 | `LlmClient` | Port for model decision-making. |
-| `ContextBuilder` | Renders task, action protocol, state summary, and history into the prompt. |
+| `ContextManager` | Port for building structured prompts from `AgentRun`. |
+| `Prompt` | Structured prompt sections with final string rendering. |
+| `DefaultContextManager` | Composes prompt section renderers. |
+| `ContextBuilder` | Backward-compatible string facade over the new context seam. |
 | `Action` | Sealed action protocol between model and Java runtime. |
 | `Observation` | Tool/state execution result. |
 | `Turn` | One action/observation pair in the trajectory. |
@@ -129,15 +132,11 @@ This lets `ToolExecutor` accept only `ToolAction`, while `StateActionHandler` ac
 
 These are intentional review targets, not emergencies.
 
-### 1. ContextBuilder is still a string-building concentration point
-
-`ContextBuilder` currently renders protocol, task, state summary, and history in one class. This is acceptable for the MVP, but it may eventually want section renderers.
-
-### 2. AgentState still renders itself
+### 1. AgentState still renders itself
 
 `AgentState` now no longer handles action records, but it still renders its own prompt summary. A future `AgentStateRenderer` could make state purely data.
 
-### 3. Action taxonomy is improved but still nested in one file
+### 2. Action taxonomy is improved but still nested in one file
 
 The sealed hierarchy is now explicit, but all action records still live in `Action.java`. This keeps the MVP compact; later, each action family could move into its own package.
 
@@ -148,7 +147,7 @@ The first OO refinement has been applied:
 ```text
 AgentLoop
   ├── AgentRun
-  ├── ContextBuilder
+  ├── ContextManager
   ├── LlmClient
   ├── ActionDispatcher
   └── TrajectoryLogger
@@ -192,7 +191,7 @@ The ideal `AgentLoop.run()` should be close to this:
 
 ```java
 while (run.hasStepsRemaining()) {
-    String context = contextBuilder.build(task, run);
+    String context = contextManager.buildPrompt(run).render();
     Action action = llmClient.nextAction(context);
 
     if (action instanceof Action.Finish finish) {
@@ -235,7 +234,7 @@ Use these questions before adding new features:
 | Done | Introduce `ActionDispatcher` | Removed action routing from `AgentLoop`. |
 | Done | Introduce `StateActionHandler` | Made `AgentState` closer to pure state. |
 | Done | Split conceptual action groups | Added `ControlAction`, `StateAction`, and `ToolAction`. |
-| P2 | Split prompt rendering sections | Keep `ContextBuilder` from becoming a string-building god object. |
+| Done | Split prompt rendering sections | Added `ContextManager`, structured `Prompt`, and section renderers. |
 | P2 | Add checkpoint/persistence seam | Move beyond in-memory state when needed. |
 
 ## Relationship to LangChain Deep Agents / pi-style coding agents

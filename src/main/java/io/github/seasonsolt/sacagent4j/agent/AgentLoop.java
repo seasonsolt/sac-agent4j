@@ -1,8 +1,10 @@
 package io.github.seasonsolt.sacagent4j.agent;
 
-import io.github.seasonsolt.sacagent4j.llm.LlmClient;
+import io.github.seasonsolt.sacagent4j.agent.context.ContextManager;
+import io.github.seasonsolt.sacagent4j.agent.context.ContextManagers;
 import io.github.seasonsolt.sacagent4j.plan.TodoItem;
 import io.github.seasonsolt.sacagent4j.state.AgentState;
+import io.github.seasonsolt.sacagent4j.llm.LlmClient;
 import io.github.seasonsolt.sacagent4j.tool.ToolExecutor;
 import io.github.seasonsolt.sacagent4j.trajectory.NoopTrajectoryLogger;
 import io.github.seasonsolt.sacagent4j.trajectory.TrajectoryLogger;
@@ -12,33 +14,43 @@ import java.util.List;
 /**
  * The minimal SWE-agent control loop.
  *
- * <p>The loop now owns only time/control flow: build context, ask the LLM for
- * one {@link Action}, dispatch non-terminal actions, record the turn, and stop
- * on {@code finish} or step exhaustion.</p>
+ * <p>The loop owns only time/control flow: build context, ask the LLM for one
+ * {@link Action}, dispatch non-terminal actions, record the turn, and stop on
+ * {@code finish} or step exhaustion.</p>
  */
 public final class AgentLoop {
     private final LlmClient llmClient;
     private final ActionDispatcher actionDispatcher;
-    private final ContextBuilder contextBuilder;
+    private final ContextManager contextManager;
     private final int maxSteps;
     private final TrajectoryLogger trajectoryLogger;
     private AgentRun lastRun;
 
     public AgentLoop(LlmClient llmClient, ToolExecutor toolExecutor, ContextBuilder contextBuilder, int maxSteps) {
-        this(llmClient, new ActionDispatcher(new StateActionHandler(), toolExecutor), contextBuilder, maxSteps, new NoopTrajectoryLogger());
+        this(llmClient, new ActionDispatcher(new StateActionHandler(), toolExecutor),
+                ContextManagers.fromContextBuilder(contextBuilder), maxSteps, new NoopTrajectoryLogger());
     }
 
     public AgentLoop(LlmClient llmClient, ToolExecutor toolExecutor, ContextBuilder contextBuilder, int maxSteps, TrajectoryLogger trajectoryLogger) {
-        this(llmClient, new ActionDispatcher(new StateActionHandler(), toolExecutor), contextBuilder, maxSteps, trajectoryLogger);
+        this(llmClient, new ActionDispatcher(new StateActionHandler(), toolExecutor),
+                ContextManagers.fromContextBuilder(contextBuilder), maxSteps, trajectoryLogger);
+    }
+
+    public AgentLoop(LlmClient llmClient, ToolExecutor toolExecutor, ContextManager contextManager, int maxSteps, TrajectoryLogger trajectoryLogger) {
+        this(llmClient, new ActionDispatcher(new StateActionHandler(), toolExecutor), contextManager, maxSteps, trajectoryLogger);
     }
 
     public AgentLoop(LlmClient llmClient, ActionDispatcher actionDispatcher, ContextBuilder contextBuilder, int maxSteps, TrajectoryLogger trajectoryLogger) {
+        this(llmClient, actionDispatcher, ContextManagers.fromContextBuilder(contextBuilder), maxSteps, trajectoryLogger);
+    }
+
+    public AgentLoop(LlmClient llmClient, ActionDispatcher actionDispatcher, ContextManager contextManager, int maxSteps, TrajectoryLogger trajectoryLogger) {
         if (maxSteps <= 0) {
             throw new IllegalArgumentException("maxSteps must be positive");
         }
         this.llmClient = llmClient;
         this.actionDispatcher = actionDispatcher;
-        this.contextBuilder = contextBuilder;
+        this.contextManager = contextManager;
         this.maxSteps = maxSteps;
         this.trajectoryLogger = trajectoryLogger;
     }
@@ -55,7 +67,7 @@ public final class AgentLoop {
         trajectoryLogger.started(task, maxSteps);
         try {
             while (run.hasStepsRemaining()) {
-                String context = contextBuilder.build(run);
+                String context = contextManager.buildPrompt(run).render();
                 Action action = llmClient.nextAction(context);
                 if (action instanceof Action.Finish finish) {
                     AgentResult result = run.finished(finish.summary());

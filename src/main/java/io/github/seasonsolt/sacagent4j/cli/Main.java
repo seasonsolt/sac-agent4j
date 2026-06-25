@@ -3,7 +3,7 @@ package io.github.seasonsolt.sacagent4j.cli;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.seasonsolt.sacagent4j.agent.AgentLoop;
 import io.github.seasonsolt.sacagent4j.agent.AgentResult;
-import io.github.seasonsolt.sacagent4j.agent.ContextBuilder;
+import io.github.seasonsolt.sacagent4j.agent.context.DefaultContextManager;
 import io.github.seasonsolt.sacagent4j.llm.JsonLineLlmClient;
 import io.github.seasonsolt.sacagent4j.llm.LlmClient;
 import io.github.seasonsolt.sacagent4j.llm.OpenAiCompatibleLlmClient;
@@ -61,7 +61,7 @@ public final class Main implements Callable<Integer> {
         AgentLoop loop = new AgentLoop(
                 llmClient,
                 new ToolExecutor(ws, testCommand, ToolPolicy.defaultPolicy()),
-                new ContextBuilder(objectMapper),
+                new DefaultContextManager(objectMapper),
                 maxSteps,
                 trajectoryLogger
         );
