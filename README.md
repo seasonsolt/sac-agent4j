@@ -117,6 +117,12 @@ Context offload stores bulky text behind a small key. The prompt shows only the 
 
 This follows the same broad idea as LangChain deepagents' filesystem/context-management features, but keeps the Java MVP framework-free and inspectable.
 
+
+## Architecture docs
+
+- [Class diagram](docs/CLASS_DIAGRAM.md)
+- [Architecture notes](docs/ARCHITECTURE.md)
+
 ## Run
 
 The current CLI is deliberately primitive: it prints the context and reads one JSON action per line from stdin.
