@@ -2,6 +2,8 @@ package io.github.seasonsolt.sacagent4j.agent;
 
 import io.github.seasonsolt.sacagent4j.llm.LlmClient;
 import io.github.seasonsolt.sacagent4j.tool.ToolExecutor;
+import io.github.seasonsolt.sacagent4j.trajectory.NoopTrajectoryLogger;
+import io.github.seasonsolt.sacagent4j.trajectory.TrajectoryLogger;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -19,9 +21,14 @@ public final class AgentLoop {
     private final ToolExecutor toolExecutor;
     private final ContextBuilder contextBuilder;
     private final int maxSteps;
+    private final TrajectoryLogger trajectoryLogger;
     private final List<Turn> history = new ArrayList<>();
 
     public AgentLoop(LlmClient llmClient, ToolExecutor toolExecutor, ContextBuilder contextBuilder, int maxSteps) {
+        this(llmClient, toolExecutor, contextBuilder, maxSteps, new NoopTrajectoryLogger());
+    }
+
+    public AgentLoop(LlmClient llmClient, ToolExecutor toolExecutor, ContextBuilder contextBuilder, int maxSteps, TrajectoryLogger trajectoryLogger) {
         if (maxSteps <= 0) {
             throw new IllegalArgumentException("maxSteps must be positive");
         }
@@ -29,6 +36,7 @@ public final class AgentLoop {
         this.toolExecutor = toolExecutor;
         this.contextBuilder = contextBuilder;
         this.maxSteps = maxSteps;
+        this.trajectoryLogger = trajectoryLogger;
     }
 
     /**
@@ -38,15 +46,25 @@ public final class AgentLoop {
      * @return final status and immutable turn history
      */
     public AgentResult run(String task) throws Exception {
-        for (int step = 0; step < maxSteps; step++) {
-            String context = contextBuilder.build(task, history);
-            Action action = llmClient.nextAction(context);
-            if (action instanceof Action.Finish finish) {
-                return AgentResult.finished(finish.summary(), history);
+        trajectoryLogger.started(task, maxSteps);
+        try {
+            for (int step = 0; step < maxSteps; step++) {
+                String context = contextBuilder.build(task, history);
+                Action action = llmClient.nextAction(context);
+                if (action instanceof Action.Finish finish) {
+                    AgentResult result = AgentResult.finished(finish.summary(), history);
+                    trajectoryLogger.finished(result.finished(), result.summary(), result.history().size());
+                    return result;
+                }
+                Observation observation = toolExecutor.execute(action);
+                history.add(new Turn(action, observation));
+                trajectoryLogger.turn(step, action, observation);
             }
-            Observation observation = toolExecutor.execute(action);
-            history.add(new Turn(action, observation));
+            AgentResult result = AgentResult.stopped(history);
+            trajectoryLogger.finished(result.finished(), result.summary(), result.history().size());
+            return result;
+        } finally {
+            trajectoryLogger.close();
         }
-        return AgentResult.stopped(history);
     }
 }

@@ -8,6 +8,10 @@ import io.github.seasonsolt.sacagent4j.llm.JsonLineLlmClient;
 import io.github.seasonsolt.sacagent4j.llm.LlmClient;
 import io.github.seasonsolt.sacagent4j.llm.OpenAiCompatibleLlmClient;
 import io.github.seasonsolt.sacagent4j.tool.ToolExecutor;
+import io.github.seasonsolt.sacagent4j.tool.ToolPolicy;
+import io.github.seasonsolt.sacagent4j.trajectory.JsonlTrajectoryLogger;
+import io.github.seasonsolt.sacagent4j.trajectory.NoopTrajectoryLogger;
+import io.github.seasonsolt.sacagent4j.trajectory.TrajectoryLogger;
 import io.github.seasonsolt.sacagent4j.workspace.Workspace;
 import picocli.CommandLine;
 
@@ -35,6 +39,9 @@ public final class Main implements Callable<Integer> {
     @CommandLine.Option(names = "--model", description = "Model name for OpenAI-compatible mode. Defaults to OPENAI_MODEL or gpt-4o-mini")
     String model;
 
+    @CommandLine.Option(names = "--trajectory-dir", defaultValue = ".sac-agent4j/runs", description = "Directory for JSONL trajectory logs. Blank disables logging.")
+    String trajectoryDir;
+
     @CommandLine.Parameters(index = "0..*", arity = "1..*", description = "Task for the agent")
     String[] taskWords;
 
@@ -47,12 +54,16 @@ public final class Main implements Callable<Integer> {
             case "openai" -> OpenAiCompatibleLlmClient.fromEnv(objectMapper, model);
             default -> throw new IllegalArgumentException("unsupported --llm: " + llm);
         };
+        TrajectoryLogger trajectoryLogger = trajectoryDir == null || trajectoryDir.isBlank()
+                ? new NoopTrajectoryLogger()
+                : new JsonlTrajectoryLogger(objectMapper, ws, trajectoryDir);
 
         AgentLoop loop = new AgentLoop(
                 llmClient,
-                new ToolExecutor(ws, testCommand),
+                new ToolExecutor(ws, testCommand, ToolPolicy.defaultPolicy()),
                 new ContextBuilder(objectMapper),
-                maxSteps
+                maxSteps,
+                trajectoryLogger
         );
         AgentResult result = loop.run(String.join(" ", taskWords));
         System.out.println("finished=" + result.finished());

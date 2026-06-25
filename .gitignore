@@ -1,5 +1,6 @@
 target/
 dependency-reduced-pom.xml
+.sac-agent4j/
 .idea/
 *.iml
 .DS_Store

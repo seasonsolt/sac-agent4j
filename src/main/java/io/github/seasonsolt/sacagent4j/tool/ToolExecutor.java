@@ -16,19 +16,24 @@ import java.util.stream.Stream;
 /**
  * Executes the small tool set exposed to the model.
  *
- * <p>This class is intentionally local and synchronous. It is the right place to
- * add policy checks later, for example shell command allow/deny lists or separate
- * approval for destructive tools.</p>
+ * <p>This class is intentionally local and synchronous. Policy checks live here
+ * because this is the last boundary before model-chosen actions touch the host.</p>
  */
 public final class ToolExecutor {
     private static final int MAX_OUTPUT_CHARS = 12_000;
 
     private final Workspace workspace;
     private final String testCommand;
+    private final ToolPolicy toolPolicy;
 
     public ToolExecutor(Workspace workspace, String testCommand) {
+        this(workspace, testCommand, ToolPolicy.defaultPolicy());
+    }
+
+    public ToolExecutor(Workspace workspace, String testCommand, ToolPolicy toolPolicy) {
         this.workspace = workspace;
         this.testCommand = testCommand;
+        this.toolPolicy = toolPolicy;
     }
 
     /** Dispatches one model action to its concrete tool implementation. */
@@ -66,6 +71,11 @@ public final class ToolExecutor {
 
     /** Runs a shell command in the workspace and returns stdout/stderr as one observation. */
     public Observation shell(String command) throws IOException, InterruptedException {
+        PolicyDecision decision = toolPolicy.checkShell(command);
+        if (!decision.allowed()) {
+            return Observation.failed(decision.reason());
+        }
+
         Process process = new ProcessBuilder("sh", "-lc", command)
                 .directory(workspace.root().toFile())
                 .redirectErrorStream(false)
@@ -112,7 +122,7 @@ public final class ToolExecutor {
 
     private boolean isIgnored(Path path) {
         String p = workspace.root().relativize(path).toString();
-        return p.startsWith(".git/") || p.startsWith("target/") || p.contains("/target/");
+        return p.startsWith(".git/") || p.startsWith("target/") || p.contains("/target/") || p.startsWith(".sac-agent4j/");
     }
 
     private static String truncate(String input) {

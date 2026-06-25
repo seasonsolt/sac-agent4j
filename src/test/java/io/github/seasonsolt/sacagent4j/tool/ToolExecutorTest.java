@@ -36,4 +36,13 @@ class ToolExecutorTest {
         assertEquals(0, observation.exitCode());
         assertTrue(observation.output().contains(tempDir.toRealPath().toString()));
     }
+
+    @Test
+    void rejectsShellCommandsBlockedByPolicy() throws Exception {
+        ToolExecutor tools = new ToolExecutor(new Workspace(tempDir), "true", ToolPolicy.defaultPolicy());
+        Observation observation = tools.shell("rm -rf target");
+        assertEquals(1, observation.exitCode());
+        assertTrue(observation.output().contains("rejected by policy"));
+    }
+
 }

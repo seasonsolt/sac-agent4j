@@ -69,6 +69,37 @@ java -jar target/sac-agent4j-0.1.0-SNAPSHOT.jar \
 
 Any provider that implements the OpenAI `/chat/completions` response shape can be used by changing `OPENAI_BASE_URL`.
 
+## Safety and trajectory logs
+
+`sac-agent4j` now includes a minimal `ToolPolicy` for shell commands. It is not a sandbox, but it blocks obvious foot-guns such as:
+
+- `rm -rf ...`
+- `sudo ...`
+- `chmod -R ...` / `chown -R ...`
+- `git push ...`
+- `curl ... | sh` / `wget ... | sh`
+- shutdown/reboot/disk-format style commands
+
+Every run also writes a JSONL trajectory by default:
+
+```text
+.sac-agent4j/runs/<timestamp>.jsonl
+```
+
+Each line is an event:
+
+```json
+{"event":"started","task":"...","maxSteps":8}
+{"event":"turn","step":0,"action":{...},"observation":{...}}
+{"event":"finished","finished":true,"summary":"...","turns":1}
+```
+
+Disable logging by passing a blank trajectory directory:
+
+```bash
+java -jar target/sac-agent4j-0.1.0-SNAPSHOT.jar --trajectory-dir "" "inspect this repo"
+```
+
 ## Why not Spring AI / LangChain4j yet?
 
 Those frameworks are useful after the core seams are stable. For the first version, this project keeps the agent mechanics visible: action protocol, tool execution, observations, and stopping conditions.
