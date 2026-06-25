@@ -35,6 +35,32 @@ mvn test
 mvn package
 ```
 
+## Demo: fix a toy Java bug
+
+Run the end-to-end demo:
+
+```bash
+examples/run-toy-demo.sh
+```
+
+The script copies `examples/toy-java-bug` to `/tmp/sac-agent4j-toy-demo`, verifies the baseline test fails, feeds a JSON-line action sequence into `sac-agent4j`, applies a patch, runs tests again, and prints the trajectory log.
+
+Expected final signal:
+
+```text
+CalculatorTest passed
+```
+
+The demo trajectory shows the full loop:
+
+```text
+shell ./test.sh  -> failing AssertionError
+read_file        -> inspect Calculator.java
+apply_patch      -> change left - right to left + right
+run_tests        -> CalculatorTest passed
+finish
+```
+
 ## Run
 
 The current CLI is deliberately primitive: it prints the context and reads one JSON action per line from stdin.
