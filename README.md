@@ -50,6 +50,25 @@ Example action input:
 {"type":"finish","summary":"README inspected"}
 ```
 
+
+## OpenAI-compatible mode
+
+The default `json-line` mode is still the simplest way to inspect the loop manually. To let a real model choose actions, use `--llm openai` with standard environment variables:
+
+```bash
+export OPENAI_API_KEY=...
+export OPENAI_BASE_URL=https://api.openai.com/v1   # optional
+export OPENAI_MODEL=gpt-4o-mini                    # optional
+
+java -jar target/sac-agent4j-0.1.0-SNAPSHOT.jar \
+  --llm openai \
+  --workspace /path/to/repo \
+  --test-command "mvn test" \
+  "fix the failing tests"
+```
+
+Any provider that implements the OpenAI `/chat/completions` response shape can be used by changing `OPENAI_BASE_URL`.
+
 ## Why not Spring AI / LangChain4j yet?
 
 Those frameworks are useful after the core seams are stable. For the first version, this project keeps the agent mechanics visible: action protocol, tool execution, observations, and stopping conditions.

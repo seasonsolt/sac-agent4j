@@ -6,6 +6,14 @@ import io.github.seasonsolt.sacagent4j.tool.ToolExecutor;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * The minimal SWE-agent control loop.
+ *
+ * <p>The loop is deliberately boring: build context, ask the LLM for one
+ * {@link Action}, execute it, append the {@link Observation}, repeat until
+ * {@code finish} or {@code maxSteps}. This is the core mechanism that larger
+ * coding agents hide behind planners, event streams, or framework callbacks.</p>
+ */
 public final class AgentLoop {
     private final LlmClient llmClient;
     private final ToolExecutor toolExecutor;
@@ -23,6 +31,12 @@ public final class AgentLoop {
         this.maxSteps = maxSteps;
     }
 
+    /**
+     * Runs the agent on one task.
+     *
+     * @param task natural-language task from the user
+     * @return final status and immutable turn history
+     */
     public AgentResult run(String task) throws Exception {
         for (int step = 0; step < maxSteps; step++) {
             String context = contextBuilder.build(task, history);

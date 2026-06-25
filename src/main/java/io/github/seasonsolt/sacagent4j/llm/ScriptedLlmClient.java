@@ -6,6 +6,7 @@ import java.util.ArrayDeque;
 import java.util.List;
 import java.util.Queue;
 
+/** Deterministic LLM fake used by tests and examples. */
 public final class ScriptedLlmClient implements LlmClient {
     private final Queue<Action> actions;
 

@@ -5,6 +5,8 @@ import io.github.seasonsolt.sacagent4j.agent.AgentLoop;
 import io.github.seasonsolt.sacagent4j.agent.AgentResult;
 import io.github.seasonsolt.sacagent4j.agent.ContextBuilder;
 import io.github.seasonsolt.sacagent4j.llm.JsonLineLlmClient;
+import io.github.seasonsolt.sacagent4j.llm.LlmClient;
+import io.github.seasonsolt.sacagent4j.llm.OpenAiCompatibleLlmClient;
 import io.github.seasonsolt.sacagent4j.tool.ToolExecutor;
 import io.github.seasonsolt.sacagent4j.workspace.Workspace;
 import picocli.CommandLine;
@@ -14,6 +16,7 @@ import java.io.InputStreamReader;
 import java.nio.file.Path;
 import java.util.concurrent.Callable;
 
+/** CLI entry point that wires the minimal loop with a selected LLM client. */
 @CommandLine.Command(name = "sac-agent4j", mixinStandardHelpOptions = true,
         description = "A tiny handwritten SWE agent loop for learning and experimentation.")
 public final class Main implements Callable<Integer> {
@@ -26,6 +29,12 @@ public final class Main implements Callable<Integer> {
     @CommandLine.Option(names = "--max-steps", defaultValue = "8", description = "Maximum agent turns")
     int maxSteps;
 
+    @CommandLine.Option(names = "--llm", defaultValue = "json-line", description = "LLM client: json-line or openai")
+    String llm;
+
+    @CommandLine.Option(names = "--model", description = "Model name for OpenAI-compatible mode. Defaults to OPENAI_MODEL or gpt-4o-mini")
+    String model;
+
     @CommandLine.Parameters(index = "0..*", arity = "1..*", description = "Task for the agent")
     String[] taskWords;
 
@@ -33,8 +42,14 @@ public final class Main implements Callable<Integer> {
     public Integer call() throws Exception {
         ObjectMapper objectMapper = new ObjectMapper();
         Workspace ws = new Workspace(workspace);
+        LlmClient llmClient = switch (llm) {
+            case "json-line" -> new JsonLineLlmClient(objectMapper, new BufferedReader(new InputStreamReader(System.in)), System.out);
+            case "openai" -> OpenAiCompatibleLlmClient.fromEnv(objectMapper, model);
+            default -> throw new IllegalArgumentException("unsupported --llm: " + llm);
+        };
+
         AgentLoop loop = new AgentLoop(
-                new JsonLineLlmClient(objectMapper, new BufferedReader(new InputStreamReader(System.in)), System.out),
+                llmClient,
                 new ToolExecutor(ws, testCommand),
                 new ContextBuilder(objectMapper),
                 maxSteps

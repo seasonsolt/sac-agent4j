@@ -4,6 +4,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.util.List;
 
+/**
+ * Converts the current task and trajectory into the text prompt seen by the LLM.
+ *
+ * <p>This class is intentionally simple and inspectable. Later versions can
+ * add file-tree summaries, truncation, or prompt templates here without changing
+ * the rest of the loop.</p>
+ */
 public final class ContextBuilder {
     private final ObjectMapper objectMapper;
 
@@ -11,6 +18,7 @@ public final class ContextBuilder {
         this.objectMapper = objectMapper;
     }
 
+    /** Builds one prompt containing the tool protocol, task, and prior turns. */
     public String build(String task, List<Turn> history) throws Exception {
         StringBuilder context = new StringBuilder();
         context.append("You are sac-agent4j, a minimal SWE agent.\n");

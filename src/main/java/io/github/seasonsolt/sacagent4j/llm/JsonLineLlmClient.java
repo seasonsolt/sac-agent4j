@@ -6,6 +6,12 @@ import io.github.seasonsolt.sacagent4j.agent.Action;
 import java.io.BufferedReader;
 import java.io.PrintStream;
 
+/**
+ * Human-in-the-loop LLM stand-in: prints context and reads one JSON action line.
+ *
+ * <p>This makes the agent runnable before a real provider adapter exists and is
+ * useful for manually understanding each turn.</p>
+ */
 public final class JsonLineLlmClient implements LlmClient {
     private final ObjectMapper objectMapper;
     private final BufferedReader input;

@@ -13,6 +13,13 @@ import java.time.Duration;
 import java.util.Comparator;
 import java.util.stream.Stream;
 
+/**
+ * Executes the small tool set exposed to the model.
+ *
+ * <p>This class is intentionally local and synchronous. It is the right place to
+ * add policy checks later, for example shell command allow/deny lists or separate
+ * approval for destructive tools.</p>
+ */
 public final class ToolExecutor {
     private static final int MAX_OUTPUT_CHARS = 12_000;
 
@@ -24,6 +31,7 @@ public final class ToolExecutor {
         this.testCommand = testCommand;
     }
 
+    /** Dispatches one model action to its concrete tool implementation. */
     public Observation execute(Action action) throws Exception {
         return switch (action) {
             case Action.ReadFile readFile -> readFile(readFile.path());
@@ -35,11 +43,13 @@ public final class ToolExecutor {
         };
     }
 
+    /** Reads a UTF-8 text file after workspace boundary validation. */
     public Observation readFile(String path) throws IOException {
         Path resolved = workspace.resolveExisting(path);
         return Observation.ok(truncate(Files.readString(resolved)));
     }
 
+    /** Performs a tiny literal search without depending on ripgrep. */
     public Observation search(String query) throws IOException {
         StringBuilder out = new StringBuilder();
         try (Stream<Path> paths = Files.walk(workspace.root())) {
@@ -54,6 +64,7 @@ public final class ToolExecutor {
         return Observation.ok(truncate(out.toString()));
     }
 
+    /** Runs a shell command in the workspace and returns stdout/stderr as one observation. */
     public Observation shell(String command) throws IOException, InterruptedException {
         Process process = new ProcessBuilder("sh", "-lc", command)
                 .directory(workspace.root().toFile())
@@ -69,6 +80,7 @@ public final class ToolExecutor {
         return new Observation(process.exitValue(), truncate("stdout:\n" + stdout + "\nstderr:\n" + stderr));
     }
 
+    /** Applies a model-provided unified diff using git apply. */
     public Observation applyPatch(String patch) throws IOException, InterruptedException {
         Process process = new ProcessBuilder("git", "apply", "--whitespace=nowarn", "-")
                 .directory(workspace.root().toFile())
