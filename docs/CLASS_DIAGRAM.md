@@ -40,7 +40,8 @@ classDiagram
 
     class ActionDispatcher {
       -StateActionHandler stateActionHandler
-      -ToolExecutor toolExecutor
+      -ToolActionHandler toolActionHandler
+      -ToolContext toolContext
       +dispatch(action, run) Observation
     }
 
@@ -69,11 +70,6 @@ classDiagram
       +String agentState
       +String history
       +render() String
-    }
-
-    class ContextBuilder {
-      +build(run) String
-      +build(task, history, agentState) String
     }
 
     class SystemPromptRenderer
@@ -252,12 +248,7 @@ classDiagram
       -List~Pattern~ deniedShellPatterns
       +defaultPolicy() ToolPolicy
       +allowAll() ToolPolicy
-      +checkShell(command) PolicyDecision
-    }
-
-    class PolicyDecision {
-      +boolean allowed
-      +String reason
+      +checkShell(command) PermissionDecision
     }
 
     class Workspace {
@@ -289,7 +280,6 @@ classDiagram
     DefaultContextManager --> TaskRenderer
     DefaultContextManager --> AgentStateRenderer
     DefaultContextManager --> HistoryRenderer
-    ContextBuilder --> DefaultContextManager : compatibility facade
     AgentLoop --> ActionDispatcher : dispatches non-terminal actions
     AgentLoop --> TrajectoryLogger : records events
 
@@ -345,7 +335,7 @@ classDiagram
 
     ToolContext --> Workspace
     ToolContext --> ToolPolicy
-    ToolPolicy --> PolicyDecision
+    ToolPolicy --> PermissionDecision
 
     TrajectoryLogger <|.. JsonlTrajectoryLogger
     TrajectoryLogger <|.. NoopTrajectoryLogger
@@ -365,7 +355,8 @@ StateActionHandler = state mutation/read semantics
 ToolActionHandler  = tool registry + permission gate orchestration
 ToolRegistry       = available workspace capabilities
 PermissionGate     = risk boundary before tool execution
-ToolExecutor       = compatibility facade over tool pipeline
+ToolActionHandler  = side-effect execution boundary
+ToolExecutor       = optional compatibility facade, outside main loop
 LlmClient          = model boundary
 TrajectoryLogger   = trace boundary
 ```
@@ -375,8 +366,8 @@ TrajectoryLogger   = trace boundary
 - `AgentLoop` no longer branches over every concrete action.
 - `AgentLoop` depends on `ContextManager`, not a string-building concrete class.
 - Prompt sections are represented by `Prompt` and independent renderers.
-- Tool execution now goes through `ToolRegistry` and `PermissionGate`; `ToolExecutor` is only a facade.
-- `ToolExecutor` only accepts `ToolAction`; it no longer knows about state actions.
+- The main runtime path now goes through `ToolActionHandler`, `ToolRegistry`, and `PermissionGate` directly.
+- `ToolExecutor` only accepts `ToolAction` and remains outside the main loop as an optional compatibility facade.
 - `AgentState` no longer accepts action records; state mutation semantics moved to `StateActionHandler`.
 - `AgentRun` owns history, state, step budget, and run result construction.
 - The Java sealed hierarchy now expresses action ontology directly.

@@ -1,12 +1,9 @@
 package io.github.seasonsolt.sacagent4j.agent;
 
 import io.github.seasonsolt.sacagent4j.agent.context.ContextManager;
-import io.github.seasonsolt.sacagent4j.agent.context.ContextManagers;
+import io.github.seasonsolt.sacagent4j.llm.LlmClient;
 import io.github.seasonsolt.sacagent4j.plan.TodoItem;
 import io.github.seasonsolt.sacagent4j.state.AgentState;
-import io.github.seasonsolt.sacagent4j.llm.LlmClient;
-import io.github.seasonsolt.sacagent4j.tool.ToolExecutor;
-import io.github.seasonsolt.sacagent4j.trajectory.NoopTrajectoryLogger;
 import io.github.seasonsolt.sacagent4j.trajectory.TrajectoryLogger;
 
 import java.util.List;
@@ -25,24 +22,6 @@ public final class AgentLoop {
     private final int maxSteps;
     private final TrajectoryLogger trajectoryLogger;
     private AgentRun lastRun;
-
-    public AgentLoop(LlmClient llmClient, ToolExecutor toolExecutor, ContextBuilder contextBuilder, int maxSteps) {
-        this(llmClient, new ActionDispatcher(new StateActionHandler(), toolExecutor),
-                ContextManagers.fromContextBuilder(contextBuilder), maxSteps, new NoopTrajectoryLogger());
-    }
-
-    public AgentLoop(LlmClient llmClient, ToolExecutor toolExecutor, ContextBuilder contextBuilder, int maxSteps, TrajectoryLogger trajectoryLogger) {
-        this(llmClient, new ActionDispatcher(new StateActionHandler(), toolExecutor),
-                ContextManagers.fromContextBuilder(contextBuilder), maxSteps, trajectoryLogger);
-    }
-
-    public AgentLoop(LlmClient llmClient, ToolExecutor toolExecutor, ContextManager contextManager, int maxSteps, TrajectoryLogger trajectoryLogger) {
-        this(llmClient, new ActionDispatcher(new StateActionHandler(), toolExecutor), contextManager, maxSteps, trajectoryLogger);
-    }
-
-    public AgentLoop(LlmClient llmClient, ActionDispatcher actionDispatcher, ContextBuilder contextBuilder, int maxSteps, TrajectoryLogger trajectoryLogger) {
-        this(llmClient, actionDispatcher, ContextManagers.fromContextBuilder(contextBuilder), maxSteps, trajectoryLogger);
-    }
 
     public AgentLoop(LlmClient llmClient, ActionDispatcher actionDispatcher, ContextManager contextManager, int maxSteps, TrajectoryLogger trajectoryLogger) {
         if (maxSteps <= 0) {

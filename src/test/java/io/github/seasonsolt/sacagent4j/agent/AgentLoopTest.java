@@ -1,9 +1,15 @@
 package io.github.seasonsolt.sacagent4j.agent;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.github.seasonsolt.sacagent4j.agent.context.DefaultContextManager;
 import io.github.seasonsolt.sacagent4j.llm.ScriptedLlmClient;
 import io.github.seasonsolt.sacagent4j.plan.TodoStatus;
-import io.github.seasonsolt.sacagent4j.tool.ToolExecutor;
+import io.github.seasonsolt.sacagent4j.tool.DefaultPermissionGate;
+import io.github.seasonsolt.sacagent4j.tool.ToolActionHandler;
+import io.github.seasonsolt.sacagent4j.tool.ToolContext;
+import io.github.seasonsolt.sacagent4j.tool.ToolPolicy;
+import io.github.seasonsolt.sacagent4j.tool.ToolRegistry;
+import io.github.seasonsolt.sacagent4j.trajectory.NoopTrajectoryLogger;
 import io.github.seasonsolt.sacagent4j.workspace.Workspace;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -22,15 +28,10 @@ class AgentLoopTest {
     @Test
     void executesScriptedTurnsUntilFinish() throws Exception {
         Files.writeString(tempDir.resolve("README.md"), "sac-agent4j\n");
-        AgentLoop loop = new AgentLoop(
-                new ScriptedLlmClient(List.of(
-                        new Action.ReadFile("README.md"),
-                        new Action.Finish("done")
-                )),
-                new ToolExecutor(new Workspace(tempDir), "true"),
-                new ContextBuilder(new ObjectMapper()),
-                4
-        );
+        AgentLoop loop = newLoop(List.of(
+                new Action.ReadFile("README.md"),
+                new Action.Finish("done")
+        ), 4);
 
         AgentResult result = loop.run("inspect readme");
         assertTrue(result.finished());
@@ -40,17 +41,12 @@ class AgentLoopTest {
 
     @Test
     void tracksPlanAndTodoUpdatesInsideLoop() throws Exception {
-        AgentLoop loop = new AgentLoop(
-                new ScriptedLlmClient(List.of(
-                        new Action.SetPlan(List.of("inspect failure", "patch bug")),
-                        new Action.UpdateTodo(1, TodoStatus.in_progress),
-                        new Action.UpdateTodo(1, TodoStatus.completed),
-                        new Action.Finish("planned")
-                )),
-                new ToolExecutor(new Workspace(tempDir), "true"),
-                new ContextBuilder(new ObjectMapper()),
-                8
-        );
+        AgentLoop loop = newLoop(List.of(
+                new Action.SetPlan(List.of("inspect failure", "patch bug")),
+                new Action.UpdateTodo(1, TodoStatus.in_progress),
+                new Action.UpdateTodo(1, TodoStatus.completed),
+                new Action.Finish("planned")
+        ), 8);
 
         AgentResult result = loop.run("plan demo");
         assertTrue(result.finished());
@@ -62,18 +58,13 @@ class AgentLoopTest {
 
     @Test
     void carriesVirtualFilesAndOffloadedContextInAgentState() throws Exception {
-        AgentLoop loop = new AgentLoop(
-                new ScriptedLlmClient(List.of(
-                        new Action.WriteVirtualFile("notes/root-cause.md", "subtraction used instead of addition"),
-                        new Action.ReadVirtualFile("notes/root-cause.md"),
-                        new Action.OffloadContext("failure-log", "full failure log", "very long test output"),
-                        new Action.ReadContext("failure-log"),
-                        new Action.Finish("state demo")
-                )),
-                new ToolExecutor(new Workspace(tempDir), "true"),
-                new ContextBuilder(new ObjectMapper()),
-                8
-        );
+        AgentLoop loop = newLoop(List.of(
+                new Action.WriteVirtualFile("notes/root-cause.md", "subtraction used instead of addition"),
+                new Action.ReadVirtualFile("notes/root-cause.md"),
+                new Action.OffloadContext("failure-log", "full failure log", "very long test output"),
+                new Action.ReadContext("failure-log"),
+                new Action.Finish("state demo")
+        ), 8);
 
         AgentResult result = loop.run("state demo");
         assertTrue(result.finished());
@@ -84,4 +75,21 @@ class AgentLoopTest {
         assertTrue(result.history().get(3).observation().output().contains("very long test output"));
     }
 
+    private AgentLoop newLoop(List<Action> actions, int maxSteps) throws Exception {
+        ObjectMapper objectMapper = new ObjectMapper();
+        Workspace workspace = new Workspace(tempDir);
+        ToolContext toolContext = new ToolContext(workspace, "true", ToolPolicy.defaultPolicy());
+        ActionDispatcher dispatcher = new ActionDispatcher(
+                new StateActionHandler(),
+                new ToolActionHandler(ToolRegistry.defaultRegistry(), new DefaultPermissionGate()),
+                toolContext
+        );
+        return new AgentLoop(
+                new ScriptedLlmClient(actions),
+                dispatcher,
+                new DefaultContextManager(objectMapper),
+                maxSteps,
+                new NoopTrajectoryLogger()
+        );
+    }
 }

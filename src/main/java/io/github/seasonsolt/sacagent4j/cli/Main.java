@@ -1,14 +1,19 @@
 package io.github.seasonsolt.sacagent4j.cli;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.github.seasonsolt.sacagent4j.agent.ActionDispatcher;
 import io.github.seasonsolt.sacagent4j.agent.AgentLoop;
 import io.github.seasonsolt.sacagent4j.agent.AgentResult;
+import io.github.seasonsolt.sacagent4j.agent.StateActionHandler;
 import io.github.seasonsolt.sacagent4j.agent.context.DefaultContextManager;
 import io.github.seasonsolt.sacagent4j.llm.JsonLineLlmClient;
 import io.github.seasonsolt.sacagent4j.llm.LlmClient;
 import io.github.seasonsolt.sacagent4j.llm.OpenAiCompatibleLlmClient;
-import io.github.seasonsolt.sacagent4j.tool.ToolExecutor;
+import io.github.seasonsolt.sacagent4j.tool.DefaultPermissionGate;
+import io.github.seasonsolt.sacagent4j.tool.ToolActionHandler;
+import io.github.seasonsolt.sacagent4j.tool.ToolContext;
 import io.github.seasonsolt.sacagent4j.tool.ToolPolicy;
+import io.github.seasonsolt.sacagent4j.tool.ToolRegistry;
 import io.github.seasonsolt.sacagent4j.trajectory.JsonlTrajectoryLogger;
 import io.github.seasonsolt.sacagent4j.trajectory.NoopTrajectoryLogger;
 import io.github.seasonsolt.sacagent4j.trajectory.TrajectoryLogger;
@@ -58,9 +63,15 @@ public final class Main implements Callable<Integer> {
                 ? new NoopTrajectoryLogger()
                 : new JsonlTrajectoryLogger(objectMapper, ws, trajectoryDir);
 
+        ToolContext toolContext = new ToolContext(ws, testCommand, ToolPolicy.defaultPolicy());
+        ActionDispatcher actionDispatcher = new ActionDispatcher(
+                new StateActionHandler(),
+                new ToolActionHandler(ToolRegistry.defaultRegistry(), new DefaultPermissionGate()),
+                toolContext
+        );
         AgentLoop loop = new AgentLoop(
                 llmClient,
-                new ToolExecutor(ws, testCommand, ToolPolicy.defaultPolicy()),
+                actionDispatcher,
                 new DefaultContextManager(objectMapper),
                 maxSteps,
                 trajectoryLogger

@@ -24,6 +24,13 @@ The architectural goal is object-oriented clarity:
 
 ```text
 Main
+  -> wires composition root explicitly
+       -> ToolContext
+       -> ToolRegistry.defaultRegistry()
+       -> DefaultPermissionGate
+       -> ToolActionHandler
+       -> ActionDispatcher
+       -> DefaultContextManager
   -> AgentLoop.run(task)
        -> AgentRun.start(task, maxSteps)
        -> ContextManager.buildPrompt(AgentRun).render()
@@ -31,7 +38,10 @@ Main
        -> AgentLoop handles finish
        -> ActionDispatcher.dispatch(action, AgentRun)
             -> StateActionHandler for StateAction
-            -> ToolExecutor for ToolAction
+            -> ToolActionHandler for ToolAction
+                 -> ToolRegistry.find(action)
+                 -> PermissionGate.check(tool, action, context)
+                 -> Tool.execute(action, context)
        -> AgentRun.record(Action, Observation)
        -> TrajectoryLogger.turn(...)
        -> finish or continue
@@ -46,7 +56,6 @@ Main
 | `ContextManager` | Port for building structured prompts from `AgentRun`. |
 | `Prompt` | Structured prompt sections with final string rendering. |
 | `DefaultContextManager` | Composes prompt section renderers. |
-| `ContextBuilder` | Backward-compatible string facade over the new context seam. |
 | `Action` | Sealed action protocol between model and Java runtime. |
 | `Observation` | Tool/state execution result. |
 | `Turn` | One action/observation pair in the trajectory. |
@@ -58,7 +67,7 @@ Main
 | `ToolRegistry` | Registry of concrete workspace tools. |
 | `Tool` | One executable workspace capability with name and risk level. |
 | `PermissionGate` | Boundary that can approve/reject risky tool actions before execution. |
-| `ToolExecutor` | Backward-compatible facade over the registry/gate pipeline. |
+| `ToolExecutor` | Optional compatibility facade over the registry/gate pipeline; not used by `AgentLoop` or CLI composition. |
 | `ToolPolicy` | Shell safety policy used by the default permission gate. |
 | `Workspace` | Path boundary and workspace file resolution. |
 | `TrajectoryLogger` | Port for recording run events. |
@@ -97,7 +106,7 @@ An in-memory filesystem for notes, drafts, and intermediate artifacts. It does n
 Stores bulky text behind a key. Prompts and trajectories record only key/title/size unless the model explicitly reads the content:
 
 ```json
-{"type":"offload_context","key":"failure-log","title":"full test output","content":"...large text..."}
+{"type":"offload_context","key":"failure-log","title":"full failure log","content":"...large text..."}
 {"type":"read_context","key":"failure-log"}
 ```
 
@@ -105,7 +114,7 @@ This is the smallest current equivalent of Deep Agents-style filesystem/context-
 
 ## Current action groups
 
-The current `Action` sealed interface is now explicitly grouped:
+The current `Action` sealed interface is explicitly grouped:
 
 ```text
 Action
@@ -120,26 +129,23 @@ Action
       └── shell / apply_patch / run_tests
 ```
 
-This lets `ToolExecutor` accept only `ToolAction`, while `StateActionHandler` accepts only `StateAction`.
-
+This lets the runtime route by action family instead of branching over every concrete record in `AgentLoop`.
 
 ## Tool boundary
 
-Tool execution is no longer a single switch hidden inside `ToolExecutor`. The active shape is:
+Tool execution is no longer a single switch hidden inside `ToolExecutor`, and the main runtime path no longer routes through that compatibility facade. The active shape is:
 
 ```text
-ToolActionHandler
-  ├── ToolRegistry
-  │   ├── ReadFileTool
-  │   ├── SearchTool
-  │   ├── ShellTool
-  │   ├── ApplyPatchTool
-  │   └── RunTestsTool
-  └── PermissionGate
-      └── DefaultPermissionGate -> ToolPolicy for shell-like actions
+ActionDispatcher
+  -> ToolActionHandler
+       -> ToolRegistry
+            -> ReadFileTool / SearchTool / ShellTool / ApplyPatchTool / RunTestsTool
+       -> PermissionGate
+            -> DefaultPermissionGate
+                 -> ToolPolicy for command-backed medium/high-risk tools
 ```
 
-`ToolExecutor` remains as a compatibility facade for older callers, but the design center is now registry + gate. This follows the practical lesson from mature agent harnesses: tool growth and risk management need explicit seams, but the first version should stay local and inspectable.
+`ToolExecutor` remains as a small convenience facade for older tests or direct callers, but the design center and CLI path are now registry + gate. This fixes the previous half-refactor where the class diagram claimed `ToolActionHandler` was central but `AgentLoop` still reached it through `ToolExecutor`.
 
 ## Current design strengths
 
@@ -163,9 +169,13 @@ These are intentional review targets, not emergencies.
 
 The sealed hierarchy is now explicit, but all action records still live in `Action.java`. This keeps the MVP compact; later, each action family could move into its own package.
 
+### 3. Tool process execution is still duplicated
+
+`ShellTool`, `RunTestsTool`, and `ApplyPatchTool` are separated by capability, but process execution concerns such as timeout and stdout/stderr collection should eventually move behind a small `ProcessRunner`.
+
 ## Current refined class shape
 
-The first OO refinement has been applied:
+The OO refinement now matches the runtime path:
 
 ```text
 AgentLoop
@@ -181,7 +191,9 @@ AgentRun
 
 ActionDispatcher
   ├── StateActionHandler
-  └── ToolExecutor
+  └── ToolActionHandler
+        ├── ToolRegistry
+        └── PermissionGate
 ```
 
 ### AgentRun
@@ -208,9 +220,9 @@ Owns state action semantics:
 StateActionHandler.execute(StateAction, AgentState) -> Observation
 ```
 
-## Desired future loop
+## Current loop shape
 
-The ideal `AgentLoop.run()` should be close to this:
+`AgentLoop.run()` is intentionally close to:
 
 ```java
 while (run.hasStepsRemaining()) {
@@ -218,12 +230,13 @@ while (run.hasStepsRemaining()) {
     Action action = llmClient.nextAction(context);
 
     if (action instanceof Action.Finish finish) {
-        return run.finish(finish.summary());
+        return run.finished(finish.summary());
     }
 
-    Observation observation = actionDispatcher.execute(action, run);
-    run.append(new Turn(action, observation));
-    trajectoryLogger.turn(run.step(), action, observation);
+    int step = run.nextStep();
+    Observation observation = actionDispatcher.dispatch(action, run);
+    Turn turn = run.record(action, observation);
+    trajectoryLogger.turn(step, turn.action(), turn.observation());
 }
 return run.stopped();
 ```
@@ -232,10 +245,10 @@ This preserves the philosophical center:
 
 ```text
 AgentLoop = time and control flow
-ActionDispatcher = action routing
+ActionDispatcher = action-family routing
 AgentRun = run lifecycle state
 AgentState = agent inner world
-ToolExecutor = outside world side effects
+ToolActionHandler = outside-world side-effect boundary
 ```
 
 ## Review criteria for future class diagrams
@@ -259,6 +272,10 @@ Use these questions before adding new features:
 | Done | Split conceptual action groups | Added `ControlAction`, `StateAction`, and `ToolAction`. |
 | Done | Split prompt rendering sections | Added `ContextManager`, structured `Prompt`, and section renderers. |
 | Done | Add `ToolRegistry` + `PermissionGate` | Tool growth and risk gating now have explicit seams. |
+| Done | Remove tool facade from main runtime path | `AgentLoop`/CLI now wire `ToolActionHandler` directly. |
+| Done | Remove prompt compatibility facade | Deleted `ContextBuilder` / `ContextManagers`; `ContextManager` is the only prompt seam. |
+| Done | Merge decision types | `ToolPolicy` now returns `PermissionDecision`; `PolicyDecision` is gone. |
+| P1 | Add `ProcessRunner` | Share timeout/stdout/stderr handling across shell, tests, and patch tools. |
 | P2 | Add checkpoint/persistence seam | Move beyond in-memory state when needed. |
 
 ## Relationship to LangChain Deep Agents / pi-style coding agents
@@ -273,7 +290,8 @@ Use these questions before adding new features:
 | Filesystem/state | `VirtualFileSystem` under `AgentState` |
 | Context offload | `ContextOffloadStore` |
 | Planning | `TodoList` |
-| Shell/tool execution | `ToolExecutor` |
+| Tool registry / side-effect boundary | `ToolActionHandler` + `ToolRegistry` + `PermissionGate` |
+| Compatibility tool facade | `ToolExecutor` |
 | Safety policy | `ToolPolicy` |
 | Tracing | `TrajectoryLogger` |
 

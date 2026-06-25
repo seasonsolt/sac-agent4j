@@ -38,15 +38,15 @@ public final class ToolPolicy {
         return new ToolPolicy(List.of());
     }
 
-    public PolicyDecision checkShell(String command) {
+    public PermissionDecision checkShell(String command) {
         if (command == null || command.isBlank()) {
-            return PolicyDecision.deny("empty shell command");
+            return PermissionDecision.deny("empty shell command");
         }
         for (Pattern pattern : deniedShellPatterns) {
             if (pattern.matcher(command).find()) {
-                return PolicyDecision.deny("shell command rejected by policy: " + command);
+                return PermissionDecision.deny("shell command rejected by policy: " + command);
             }
         }
-        return PolicyDecision.allow();
+        return PermissionDecision.allow();
     }
 }
