@@ -9,6 +9,9 @@ import io.github.seasonsolt.sacagent4j.agent.context.DefaultContextManager;
 import io.github.seasonsolt.sacagent4j.llm.JsonLineLlmClient;
 import io.github.seasonsolt.sacagent4j.llm.LlmClient;
 import io.github.seasonsolt.sacagent4j.llm.OpenAiCompatibleLlmClient;
+import io.github.seasonsolt.sacagent4j.session.JsonlSessionRecorder;
+import io.github.seasonsolt.sacagent4j.session.NoopSessionRecorder;
+import io.github.seasonsolt.sacagent4j.session.SessionRecorder;
 import io.github.seasonsolt.sacagent4j.tool.DefaultPermissionGate;
 import io.github.seasonsolt.sacagent4j.tool.ToolActionHandler;
 import io.github.seasonsolt.sacagent4j.tool.ToolContext;
@@ -47,6 +50,9 @@ public final class Main implements Callable<Integer> {
     @CommandLine.Option(names = "--trajectory-dir", defaultValue = ".sac-agent4j/runs", description = "Directory for JSONL trajectory logs. Blank disables logging.")
     String trajectoryDir;
 
+    @CommandLine.Option(names = "--session-dir", defaultValue = ".sac-agent4j/sessions", description = "Directory for Pi-style JSONL session files. Blank disables session recording.")
+    String sessionDir;
+
     @CommandLine.Parameters(index = "0..*", arity = "1..*", description = "Task for the agent")
     String[] taskWords;
 
@@ -62,6 +68,9 @@ public final class Main implements Callable<Integer> {
         TrajectoryLogger trajectoryLogger = trajectoryDir == null || trajectoryDir.isBlank()
                 ? new NoopTrajectoryLogger()
                 : new JsonlTrajectoryLogger(objectMapper, ws, trajectoryDir);
+        SessionRecorder sessionRecorder = sessionDir == null || sessionDir.isBlank()
+                ? new NoopSessionRecorder()
+                : new JsonlSessionRecorder(objectMapper, ws, sessionDir);
 
         ToolContext toolContext = new ToolContext(ws, testCommand, ToolPolicy.defaultPolicy());
         ActionDispatcher actionDispatcher = new ActionDispatcher(
@@ -74,7 +83,8 @@ public final class Main implements Callable<Integer> {
                 actionDispatcher,
                 new DefaultContextManager(objectMapper),
                 maxSteps,
-                trajectoryLogger
+                trajectoryLogger,
+                sessionRecorder
         );
         AgentResult result = loop.run(String.join(" ", taskWords));
         System.out.println("finished=" + result.finished());

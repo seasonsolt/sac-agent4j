@@ -3,6 +3,8 @@ package io.github.seasonsolt.sacagent4j.agent;
 import io.github.seasonsolt.sacagent4j.agent.context.ContextManager;
 import io.github.seasonsolt.sacagent4j.llm.LlmClient;
 import io.github.seasonsolt.sacagent4j.plan.TodoItem;
+import io.github.seasonsolt.sacagent4j.session.NoopSessionRecorder;
+import io.github.seasonsolt.sacagent4j.session.SessionRecorder;
 import io.github.seasonsolt.sacagent4j.state.AgentState;
 import io.github.seasonsolt.sacagent4j.trajectory.TrajectoryLogger;
 
@@ -21,9 +23,14 @@ public final class AgentLoop {
     private final ContextManager contextManager;
     private final int maxSteps;
     private final TrajectoryLogger trajectoryLogger;
+    private final SessionRecorder sessionRecorder;
     private AgentRun lastRun;
 
     public AgentLoop(LlmClient llmClient, ActionDispatcher actionDispatcher, ContextManager contextManager, int maxSteps, TrajectoryLogger trajectoryLogger) {
+        this(llmClient, actionDispatcher, contextManager, maxSteps, trajectoryLogger, new NoopSessionRecorder());
+    }
+
+    public AgentLoop(LlmClient llmClient, ActionDispatcher actionDispatcher, ContextManager contextManager, int maxSteps, TrajectoryLogger trajectoryLogger, SessionRecorder sessionRecorder) {
         if (maxSteps <= 0) {
             throw new IllegalArgumentException("maxSteps must be positive");
         }
@@ -32,6 +39,7 @@ public final class AgentLoop {
         this.contextManager = contextManager;
         this.maxSteps = maxSteps;
         this.trajectoryLogger = trajectoryLogger;
+        this.sessionRecorder = sessionRecorder;
     }
 
     /**
@@ -44,6 +52,7 @@ public final class AgentLoop {
         AgentRun run = AgentRun.start(task, maxSteps);
         lastRun = run;
         trajectoryLogger.started(task, maxSteps);
+        sessionRecorder.started(task, maxSteps);
         try {
             while (run.hasStepsRemaining()) {
                 String context = contextManager.buildPrompt(run).render();
@@ -51,18 +60,25 @@ public final class AgentLoop {
                 if (action instanceof Action.Finish finish) {
                     AgentResult result = run.finished(finish.summary());
                     trajectoryLogger.finished(result.finished(), result.summary(), result.history().size());
+                    sessionRecorder.finished(result.finished(), result.summary(), result.history().size());
                     return result;
                 }
                 int step = run.nextStep();
                 Observation observation = actionDispatcher.dispatch(action, run);
                 Turn turn = run.record(action, observation);
                 trajectoryLogger.turn(step, turn.action(), turn.observation());
+                sessionRecorder.turn(step, turn.action(), turn.observation());
             }
             AgentResult result = run.stopped();
             trajectoryLogger.finished(result.finished(), result.summary(), result.history().size());
+            sessionRecorder.finished(result.finished(), result.summary(), result.history().size());
             return result;
         } finally {
-            trajectoryLogger.close();
+            try {
+                trajectoryLogger.close();
+            } finally {
+                sessionRecorder.close();
+            }
         }
     }
 

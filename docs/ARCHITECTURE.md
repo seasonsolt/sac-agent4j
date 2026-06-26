@@ -44,6 +44,7 @@ Main
                  -> Tool.execute(action, context)
        -> AgentRun.record(Action, Observation)
        -> TrajectoryLogger.turn(...)
+       -> SessionRecorder.turn(...)
        -> finish or continue
 ```
 
@@ -71,6 +72,7 @@ Main
 | `ToolPolicy` | Shell safety policy used by the default permission gate. |
 | `Workspace` | Path boundary and workspace file resolution. |
 | `TrajectoryLogger` | Port for recording run events. |
+| `SessionRecorder` | Pi-style append-only session tree for human resume/fork workflows. |
 
 ## AgentState
 
@@ -144,6 +146,26 @@ Action.java @JsonSubTypes
 
 Tests assert that every runtime JSON subtype has a catalog example, and every catalog example round-trips through Jackson. Adding a new action therefore requires updating `Action.java` and adding a deliberate example; otherwise the test suite fails before prompt/runtime drift can ship.
 
+## Pi-style session recording
+
+In addition to `TrajectoryLogger`, the CLI now wires a lightweight `SessionRecorder` by default:
+
+```text
+.sac-agent4j/sessions/--workspace-path--/<timestamp>_<sessionId>.jsonl
+```
+
+The first line is a session header. Later entries are append-only tree entries with `id` and `parentId`:
+
+```text
+session header
+  -> started
+      -> turn
+          -> turn
+              -> finished
+```
+
+This deliberately follows the useful part of Pi's coding-agent design: keep a human-readable session history that can later grow into resume, fork, tree navigation, compaction, and branch summaries. It is not a LangGraph-style checkpoint. It does not currently persist enough runtime state to resume from an exact suspended instruction; it records the action/observation path for human/session workflows.
+
 ## Tool boundary
 
 Tool execution is no longer a single switch or facade. The active shape is:
@@ -194,7 +216,8 @@ AgentLoop
   ├── ContextManager
   ├── LlmClient
   ├── ActionDispatcher
-  └── TrajectoryLogger
+  ├── TrajectoryLogger
+  └── SessionRecorder
 
 AgentRun
   ├── AgentState
@@ -248,6 +271,7 @@ while (run.hasStepsRemaining()) {
     Observation observation = actionDispatcher.dispatch(action, run);
     Turn turn = run.record(action, observation);
     trajectoryLogger.turn(step, turn.action(), turn.observation());
+    sessionRecorder.turn(step, turn.action(), turn.observation());
 }
 return run.stopped();
 ```
@@ -291,6 +315,7 @@ Use these questions before adding new features:
 | Done | Move state rendering out of `AgentState` | `AgentStateRenderer` owns prompt formatting; state remains data. |
 | Done | Remove `ToolExecutor` | Tests and examples use `ToolActionHandler` directly; no facade remains. |
 | Done | Report unreadable search files | `ToolSupport.literalSearch` counts skipped unreadable files instead of swallowing exceptions silently. |
+| Done | Add Pi-style session recorder | JSONL session files now use id/parentId entries as the first step toward resume/fork/tree workflows. |
 | P2 | Add checkpoint/persistence seam | Move beyond in-memory state when needed. |
 
 ## Relationship to LangChain Deep Agents / pi-style coding agents
@@ -308,6 +333,7 @@ Use these questions before adding new features:
 | Tool registry / side-effect boundary | `ToolActionHandler` + `ToolRegistry` + `PermissionGate` |
 | Safety policy | `ToolPolicy` |
 | Tracing | `TrajectoryLogger` |
+| Pi-style session history | `SessionRecorder` + `JsonlSessionRecorder` |
 
 Missing or intentionally deferred:
 

@@ -293,6 +293,7 @@ classDiagram
     DefaultContextManager --> HistoryRenderer
     AgentLoop --> ActionDispatcher : dispatches non-terminal actions
     AgentLoop --> TrajectoryLogger : records events
+    AgentLoop --> SessionRecorder : records session tree
 
     AgentRun *-- AgentState
     AgentRun *-- Turn
@@ -353,6 +354,8 @@ classDiagram
 
     TrajectoryLogger <|.. JsonlTrajectoryLogger
     TrajectoryLogger <|.. NoopTrajectoryLogger
+    SessionRecorder <|.. JsonlSessionRecorder
+    SessionRecorder <|.. NoopSessionRecorder
 ```
 
 ## Responsibility split
@@ -374,6 +377,7 @@ ToolActionHandler  = side-effect execution boundary
 ProcessRunner      = command process adapter
 LlmClient          = model boundary
 TrajectoryLogger   = trace boundary
+SessionRecorder    = Pi-style session-history boundary
 ```
 
 ## Why this is more OO than the previous shape
