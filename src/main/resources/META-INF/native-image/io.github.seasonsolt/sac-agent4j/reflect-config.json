@@ -1,0 +1,86 @@
+[
+  {
+    "name": "io.github.seasonsolt.sacagent4j.agent.Action$ApplyPatch",
+    "allDeclaredConstructors": true,
+    "allPublicMethods": true,
+    "allRecordComponents": true
+  },
+  {
+    "name": "io.github.seasonsolt.sacagent4j.agent.Action$Finish",
+    "allDeclaredConstructors": true,
+    "allPublicMethods": true,
+    "allRecordComponents": true
+  },
+  {
+    "name": "io.github.seasonsolt.sacagent4j.agent.Action$OffloadContext",
+    "allDeclaredConstructors": true,
+    "allPublicMethods": true,
+    "allRecordComponents": true
+  },
+  {
+    "name": "io.github.seasonsolt.sacagent4j.agent.Action$ReadContext",
+    "allDeclaredConstructors": true,
+    "allPublicMethods": true,
+    "allRecordComponents": true
+  },
+  {
+    "name": "io.github.seasonsolt.sacagent4j.agent.Action$ReadFile",
+    "allDeclaredConstructors": true,
+    "allPublicMethods": true,
+    "allRecordComponents": true
+  },
+  {
+    "name": "io.github.seasonsolt.sacagent4j.agent.Action$ReadVirtualFile",
+    "allDeclaredConstructors": true,
+    "allPublicMethods": true,
+    "allRecordComponents": true
+  },
+  {
+    "name": "io.github.seasonsolt.sacagent4j.agent.Action$RunTests",
+    "allDeclaredConstructors": true,
+    "allPublicMethods": true,
+    "allRecordComponents": true
+  },
+  {
+    "name": "io.github.seasonsolt.sacagent4j.agent.Action$Search",
+    "allDeclaredConstructors": true,
+    "allPublicMethods": true,
+    "allRecordComponents": true
+  },
+  {
+    "name": "io.github.seasonsolt.sacagent4j.agent.Action$SetPlan",
+    "allDeclaredConstructors": true,
+    "allPublicMethods": true,
+    "allRecordComponents": true
+  },
+  {
+    "name": "io.github.seasonsolt.sacagent4j.agent.Action$Shell",
+    "allDeclaredConstructors": true,
+    "allPublicMethods": true,
+    "allRecordComponents": true
+  },
+  {
+    "name": "io.github.seasonsolt.sacagent4j.agent.Action$UpdateTodo",
+    "allDeclaredConstructors": true,
+    "allPublicMethods": true,
+    "allRecordComponents": true
+  },
+  {
+    "name": "io.github.seasonsolt.sacagent4j.agent.Action$WriteVirtualFile",
+    "allDeclaredConstructors": true,
+    "allPublicMethods": true,
+    "allRecordComponents": true
+  },
+  {
+    "name": "io.github.seasonsolt.sacagent4j.agent.Observation",
+    "allDeclaredConstructors": true,
+    "allPublicMethods": true,
+    "allRecordComponents": true
+  },
+  {
+    "name": "io.github.seasonsolt.sacagent4j.agent.Turn",
+    "allDeclaredConstructors": true,
+    "allPublicMethods": true,
+    "allRecordComponents": true
+  }
+]

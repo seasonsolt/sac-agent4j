@@ -41,6 +41,53 @@ mvn test
 mvn package
 ```
 
+## Native binary with GraalVM
+
+The regular JVM jar remains the default build. If GraalVM with `native-image` is
+installed, build an opt-in native CLI binary with:
+
+```bash
+mvn -Pnative package
+```
+
+The executable is written to:
+
+```text
+target/sac-agent4j
+```
+
+Run it the same way as the jar:
+
+```bash
+target/sac-agent4j --workspace . "inspect this repo"
+```
+
+Native Image mainly improves command startup time and memory footprint. It does
+not remove the dominant latency in `--llm openai` mode, which is usually the
+network round trip and model response time.
+
+This project uses Jackson polymorphic records and picocli annotations. Picocli
+native metadata is generated during compilation by `picocli-codegen`; the
+Jackson record reflection metadata is checked in under
+`src/main/resources/META-INF/native-image/` and covered by a unit test.
+
+If a future native build reports missing reflection metadata for new code paths,
+collect metadata by running representative CLI flows under the native-image
+agent and merge the generated entries into the checked-in metadata:
+
+```bash
+mvn package
+java -agentlib:native-image-agent=config-output-dir=src/main/resources/META-INF/native-image \
+  -jar target/sac-agent4j-0.1.0-SNAPSHOT.jar \
+  --trajectory-dir "" \
+  --workspace . \
+  "inspect this repo" <<'JSON'
+{"type":"finish","summary":"metadata warmup"}
+JSON
+```
+
+Then rebuild with `mvn -Pnative package`.
+
 ## Demo: fix a toy Java bug
 
 Run the end-to-end demo:
