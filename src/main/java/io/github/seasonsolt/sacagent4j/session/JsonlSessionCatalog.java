@@ -23,7 +23,8 @@ public final class JsonlSessionCatalog {
                     .filter(Files::isRegularFile)
                     .filter(path -> path.getFileName().toString().endsWith(".jsonl"))
                     .map(path -> readItem(objectMapper, path))
-                    .sorted(Comparator.comparing(SessionListItem::timestamp).reversed())
+                    .sorted(Comparator.comparing(SessionListItem::timestamp).reversed()
+                            .thenComparing(item -> item.path().toString()))
                     .toList();
         }
     }
