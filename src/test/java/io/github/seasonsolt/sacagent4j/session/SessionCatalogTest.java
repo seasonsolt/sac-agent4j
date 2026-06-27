@@ -50,19 +50,21 @@ final class SessionCatalogTest {
     void rendersQuotedFieldsOnOnePhysicalLine() {
         SessionListItem item = new SessionListItem(
                 tempDir.resolve("session\nwith\ttab.jsonl"),
-                "session-1",
+                "session\n1",
                 java.time.Instant.parse("2026-06-27T00:00:00Z"),
                 "fix \"tests\"\nnow",
                 "finished",
                 "done\rwith\ttabs",
                 2,
-                "leaf-1"
+                "leaf\t1"
         );
 
         String rendered = item.render();
 
         assertTrue(rendered.contains("task=\"fix \\\"tests\\\"\\nnow\""));
         assertTrue(rendered.contains("summary=\"done\\rwith\\ttabs\""));
+        assertTrue(rendered.contains("leaf=leaf\\t1"));
+        assertTrue(rendered.contains("session=session\\n1"));
         assertTrue(rendered.contains("path=" + tempDir.resolve("session\nwith\ttab.jsonl").toString()
                 .replace("\n", "\\n")
                 .replace("\t", "\\t")));

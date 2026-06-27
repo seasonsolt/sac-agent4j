@@ -20,8 +20,8 @@ public record SessionListItem(
                 + " turns=" + turns
                 + " task=\"" + escape(task) + "\""
                 + " summary=\"" + escape(finalSummary) + "\""
-                + " leaf=" + leafId
-                + " session=" + sessionId
+                + " leaf=" + escape(leafId)
+                + " session=" + escape(sessionId)
                 + " path=" + escape(path.toString());
     }
 
