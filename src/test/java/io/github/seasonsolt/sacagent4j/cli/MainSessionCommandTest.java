@@ -119,6 +119,41 @@ final class MainSessionCommandTest {
     }
 
     @Test
+    void printsSessionHandoffFromCli() throws Exception {
+        Path sessionPath = writeSession();
+        StringWriter output = new StringWriter();
+        CommandLine commandLine = new CommandLine(new Main());
+        commandLine.setOut(new PrintWriter(output, true));
+
+        int exitCode = commandLine.execute("session", "handoff", sessionPath.toString());
+
+        assertEquals(0, exitCode);
+        assertTrue(output.toString().contains("# Session Handoff"));
+        assertTrue(output.toString().contains("Task: fix tests"));
+        assertTrue(output.toString().contains("## Resume Command"));
+    }
+
+    @Test
+    void writesSessionHandoffToOutputPathFromCli() throws Exception {
+        Path sessionPath = writeSession();
+        Path outputPath = tempDir.resolve("handoffs").resolve("handoff.md");
+        StringWriter output = new StringWriter();
+        CommandLine commandLine = new CommandLine(new Main());
+        commandLine.setOut(new PrintWriter(output, true));
+
+        int exitCode = commandLine.execute(
+                "session", "handoff", sessionPath.toString(),
+                "--output", outputPath.toString()
+        );
+
+        assertEquals(0, exitCode);
+        assertEquals("handoff=" + outputPath.toAbsolutePath().normalize(), output.toString().trim());
+        String markdown = Files.readString(outputPath, StandardCharsets.UTF_8);
+        assertTrue(markdown.contains("# Session Handoff"));
+        assertTrue(markdown.endsWith(System.lineSeparator()));
+    }
+
+    @Test
     void resumesSessionFromCliAndAppendsContinuation() throws Exception {
         Path sessionPath = writeSession();
         ObjectMapper objectMapper = new ObjectMapper();

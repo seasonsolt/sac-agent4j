@@ -17,6 +17,7 @@ import io.github.seasonsolt.sacagent4j.session.JsonlSessionReader;
 import io.github.seasonsolt.sacagent4j.session.JsonlSessionRecorder;
 import io.github.seasonsolt.sacagent4j.session.NoopSessionRecorder;
 import io.github.seasonsolt.sacagent4j.session.SessionDocument;
+import io.github.seasonsolt.sacagent4j.session.SessionHandoff;
 import io.github.seasonsolt.sacagent4j.session.SessionReplay;
 import io.github.seasonsolt.sacagent4j.session.SessionRecorder;
 import io.github.seasonsolt.sacagent4j.tool.DefaultPermissionGate;
@@ -33,6 +34,8 @@ import picocli.CommandLine.Model.CommandSpec;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.concurrent.Callable;
 
@@ -131,6 +134,7 @@ public final class Main implements Callable<Integer> {
                     SessionTreeCommand.class,
                     SessionListCommand.class,
                     SessionNoteCommand.class,
+                    SessionHandoffCommand.class,
                     SessionForkCommand.class
             })
     static final class SessionCommand implements Runnable {
@@ -214,6 +218,42 @@ public final class Main implements Callable<Integer> {
         public Integer call() throws Exception {
             String noteId = JsonlSessionAnnotator.note(new ObjectMapper(), session, entryId, title, body);
             spec.commandLine().getOut().println("note=" + noteId);
+            return 0;
+        }
+    }
+
+    @CommandLine.Command(name = "handoff", description = "Render a markdown handoff for a session entry.")
+    static final class SessionHandoffCommand implements Callable<Integer> {
+        @CommandLine.Spec
+        CommandSpec spec;
+
+        @CommandLine.Parameters(index = "0", description = "Session JSONL file")
+        Path session;
+
+        @CommandLine.Option(names = "--entry-id", description = "Entry id to include. Defaults to the active leaf.")
+        String entryId;
+
+        @CommandLine.Option(names = "--output", description = "Markdown output path. Defaults to stdout.")
+        Path output;
+
+        @Override
+        public Integer call() throws Exception {
+            ObjectMapper objectMapper = new ObjectMapper();
+            SessionDocument document = JsonlSessionReader.read(objectMapper, session);
+            String selectedEntryId = entryId == null || entryId.isBlank() ? document.leafId() : entryId;
+            String markdown = SessionHandoff.render(document, selectedEntryId);
+            if (output == null) {
+                spec.commandLine().getOut().println(markdown);
+                return 0;
+            }
+
+            Path outputPath = output.toAbsolutePath().normalize();
+            Path parent = outputPath.getParent();
+            if (parent != null) {
+                Files.createDirectories(parent);
+            }
+            Files.writeString(outputPath, markdown + System.lineSeparator(), StandardCharsets.UTF_8);
+            spec.commandLine().getOut().println("handoff=" + outputPath);
             return 0;
         }
     }
