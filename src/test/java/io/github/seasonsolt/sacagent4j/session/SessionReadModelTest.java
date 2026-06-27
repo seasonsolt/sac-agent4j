@@ -174,6 +174,32 @@ final class SessionReadModelTest {
         assertTrue(tree.contains("finished=true summary=\"done\""));
     }
 
+    @Test
+    void rendersTeamNotesUnderSelectedEntries() throws Exception {
+        ObjectMapper objectMapper = new ObjectMapper();
+        Path sessionPath = writeSampleSession(objectMapper);
+        SessionDocument document = JsonlSessionReader.read(objectMapper, sessionPath);
+        String firstTurnId = document.entries().stream()
+                .filter(entry -> entry.type().equals("turn"))
+                .findFirst()
+                .orElseThrow()
+                .id();
+
+        String noteId = JsonlSessionAnnotator.note(
+                objectMapper,
+                sessionPath,
+                firstTurnId,
+                "review",
+                "This read established the branch point."
+        );
+
+        SessionDocument annotated = JsonlSessionReader.read(objectMapper, sessionPath);
+        String tree = annotated.tree().render();
+
+        assertTrue(tree.contains(noteId + " note title=\"review\" bodyChars=39"));
+        assertTrue(tree.indexOf(firstTurnId + " turn step=0 action=read_file") < tree.indexOf(noteId + " note"));
+    }
+
     private Path writeSampleSession(ObjectMapper objectMapper) throws Exception {
         JsonlSessionRecorder recorder = new JsonlSessionRecorder(objectMapper, new Workspace(tempDir), ".sac-agent4j/sessions");
         recorder.started("fix tests", 4);

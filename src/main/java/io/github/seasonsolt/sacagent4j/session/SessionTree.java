@@ -54,6 +54,8 @@ public record SessionTree(String sessionId, String leafId, List<SessionEntry> en
                     + " summary=\"" + escape(entry.node().path("summary").asText("")) + "\""
                     + " turns=" + entry.node().path("turns").asInt();
             case "forked" -> " fromEntry=" + entry.node().path("from").path("entryId").asText("");
+            case "note" -> " title=\"" + escape(entry.node().path("title").asText("")) + "\""
+                    + " bodyChars=" + entry.node().path("body").asText("").length();
             default -> "";
         };
     }
