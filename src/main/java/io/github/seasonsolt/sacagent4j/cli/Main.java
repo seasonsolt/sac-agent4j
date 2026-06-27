@@ -10,6 +10,7 @@ import io.github.seasonsolt.sacagent4j.agent.context.DefaultContextManager;
 import io.github.seasonsolt.sacagent4j.llm.JsonLineLlmClient;
 import io.github.seasonsolt.sacagent4j.llm.LlmClient;
 import io.github.seasonsolt.sacagent4j.llm.OpenAiCompatibleLlmClient;
+import io.github.seasonsolt.sacagent4j.session.JsonlSessionCatalog;
 import io.github.seasonsolt.sacagent4j.session.JsonlSessionForker;
 import io.github.seasonsolt.sacagent4j.session.JsonlSessionReader;
 import io.github.seasonsolt.sacagent4j.session.JsonlSessionRecorder;
@@ -124,7 +125,12 @@ public final class Main implements Callable<Integer> {
     }
 
     @CommandLine.Command(name = "session", description = "Inspect and fork JSONL session files.",
-            subcommands = {SessionSummaryCommand.class, SessionTreeCommand.class, SessionForkCommand.class})
+            subcommands = {
+                    SessionSummaryCommand.class,
+                    SessionTreeCommand.class,
+                    SessionListCommand.class,
+                    SessionForkCommand.class
+            })
     static final class SessionCommand implements Runnable {
         @CommandLine.Spec
         CommandSpec spec;
@@ -163,6 +169,24 @@ public final class Main implements Callable<Integer> {
         public Integer call() throws Exception {
             SessionDocument document = JsonlSessionReader.read(new ObjectMapper(), session);
             spec.commandLine().getOut().println(document.tree().render());
+            return 0;
+        }
+    }
+
+    @CommandLine.Command(name = "list", description = "List session files under a directory.")
+    static final class SessionListCommand implements Callable<Integer> {
+        @CommandLine.Spec
+        CommandSpec spec;
+
+        @CommandLine.Parameters(index = "0", description = "Session root directory")
+        Path directory;
+
+        @Override
+        public Integer call() throws Exception {
+            ObjectMapper objectMapper = new ObjectMapper();
+            for (var item : JsonlSessionCatalog.list(objectMapper, directory)) {
+                spec.commandLine().getOut().println(item.render());
+            }
             return 0;
         }
     }

@@ -81,6 +81,22 @@ final class MainSessionCommandTest {
     }
 
     @Test
+    void listsSessionsFromCli() throws Exception {
+        Path sessionPath = writeSession();
+        Path sessionRoot = sessionPath.getParent().getParent();
+        StringWriter output = new StringWriter();
+        CommandLine commandLine = new CommandLine(new Main());
+        commandLine.setOut(new PrintWriter(output, true));
+
+        int exitCode = commandLine.execute("session", "list", sessionRoot.toString());
+
+        assertEquals(0, exitCode);
+        assertTrue(output.toString().contains("task=\"fix tests\""));
+        assertTrue(output.toString().contains("status=finished"));
+        assertTrue(output.toString().contains("path=" + sessionPath.toAbsolutePath().normalize()));
+    }
+
+    @Test
     void resumesSessionFromCliAndAppendsContinuation() throws Exception {
         Path sessionPath = writeSession();
         ObjectMapper objectMapper = new ObjectMapper();
