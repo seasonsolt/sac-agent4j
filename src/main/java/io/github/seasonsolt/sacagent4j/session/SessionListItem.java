@@ -22,7 +22,7 @@ public record SessionListItem(
                 + " summary=\"" + escape(finalSummary) + "\""
                 + " leaf=" + leafId
                 + " session=" + sessionId
-                + " path=" + path;
+                + " path=" + escape(path.toString());
     }
 
     private String escape(String value) {
