@@ -7,8 +7,10 @@ import io.github.seasonsolt.sacagent4j.workspace.Workspace;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
 
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 final class SessionHandoffTest {
@@ -33,6 +35,36 @@ final class SessionHandoffTest {
         assertTrue(markdown.contains("Selected entry: " + document.leafId()));
         assertTrue(markdown.contains("```text\n" + document.tree().render()));
         assertTrue(markdown.contains("java -jar target/sac-agent4j-0.1.0-SNAPSHOT.jar --resume-session"));
-        assertTrue(markdown.contains("--resume-entry " + document.leafId()));
+        assertTrue(markdown.contains("--resume-entry '" + document.leafId() + "'"));
+    }
+
+    @Test
+    void quotesResumeCommandArgumentsForShellSafety() throws Exception {
+        ObjectMapper objectMapper = new ObjectMapper();
+        Path workspaceRoot = tempDir.resolve("team's workspace");
+        Files.createDirectories(workspaceRoot);
+        JsonlSessionRecorder recorder = new JsonlSessionRecorder(objectMapper, new Workspace(workspaceRoot), ".sac-agent4j/sessions");
+        recorder.started("fix tests", 4);
+        recorder.turn(0, new Action.ReadFile("README.md"), Observation.ok("readme"));
+        recorder.finished(true, "done", 1);
+        recorder.close();
+        Path sessionPath = recorder.path().orElseThrow();
+        SessionDocument document = JsonlSessionReader.read(objectMapper, sessionPath);
+
+        String command = resumeCommandBlock(SessionHandoff.render(document, document.leafId()));
+        String rawPath = sessionPath.toAbsolutePath().normalize().toString();
+
+        assertTrue(command.contains("--resume-session '" + rawPath.replace("'", "'\"'\"'") + "'"));
+        assertTrue(command.contains("--resume-entry '" + document.leafId() + "'"));
+        assertFalse(command.contains("--resume-session " + rawPath + " --resume-entry"));
+    }
+
+    private String resumeCommandBlock(String markdown) {
+        String marker = "```bash\n";
+        int start = markdown.indexOf(marker);
+        assertTrue(start >= 0);
+        int end = markdown.indexOf("\n```", start + marker.length());
+        assertTrue(end > start);
+        return markdown.substring(start + marker.length(), end);
     }
 }

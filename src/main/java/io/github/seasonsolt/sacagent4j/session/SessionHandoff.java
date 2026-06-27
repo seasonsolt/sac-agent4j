@@ -22,9 +22,9 @@ public final class SessionHandoff {
         out.append("## Resume Command").append(System.lineSeparator()).append(System.lineSeparator());
         out.append("```bash").append(System.lineSeparator());
         out.append("java -jar target/sac-agent4j-0.1.0-SNAPSHOT.jar --resume-session ")
-                .append(document.path())
+                .append(shellQuote(document.path().toString()))
                 .append(" --resume-entry ")
-                .append(selectedEntryId)
+                .append(shellQuote(selectedEntryId))
                 .append(System.lineSeparator());
         out.append("```").append(System.lineSeparator()).append(System.lineSeparator());
         out.append("## Tree").append(System.lineSeparator()).append(System.lineSeparator());
@@ -81,6 +81,10 @@ public final class SessionHandoff {
                 .replace("\n", "\\n")
                 .replace("\r", "\\r")
                 .replace("\t", "\\t");
+    }
+
+    private static String shellQuote(String value) {
+        return "'" + value.replace("'", "'\"'\"'") + "'";
     }
 
     private record HandoffStatus(String task, String status) {}
