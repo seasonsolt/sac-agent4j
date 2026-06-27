@@ -24,7 +24,7 @@ public record SessionDocument(Path path, ObjectNode header, List<SessionEntry> e
     public String leafId() {
         for (int index = entries.size() - 1; index >= 0; index--) {
             SessionEntry entry = entries.get(index);
-            if (!entry.type().equals("forked")) {
+            if (!entry.type().equals("forked") && !entry.type().equals("note")) {
                 return entry.id();
             }
         }

@@ -200,6 +200,55 @@ final class SessionReadModelTest {
         assertTrue(tree.indexOf(firstTurnId + " turn step=0 action=read_file") < tree.indexOf(noteId + " note"));
     }
 
+    @Test
+    void notesDoNotChangeActiveLeafOrSummary() throws Exception {
+        ObjectMapper objectMapper = new ObjectMapper();
+        Path sessionPath = writeSampleSession(objectMapper);
+        SessionDocument original = JsonlSessionReader.read(objectMapper, sessionPath);
+        String originalLeafId = original.leafId();
+        SessionSummary originalSummary = original.summary();
+        String firstTurnId = original.entries().stream()
+                .filter(entry -> entry.type().equals("turn"))
+                .findFirst()
+                .orElseThrow()
+                .id();
+
+        JsonlSessionAnnotator.note(objectMapper, sessionPath, firstTurnId, "review", "branch point");
+
+        SessionDocument annotated = JsonlSessionReader.read(objectMapper, sessionPath);
+        SessionSummary annotatedSummary = annotated.summary();
+
+        assertEquals(originalLeafId, annotated.leafId());
+        assertEquals(originalSummary.leafId(), annotatedSummary.leafId());
+        assertEquals("finished", annotatedSummary.status());
+        assertEquals("done", annotatedSummary.finalSummary());
+        assertEquals(originalSummary.turns(), annotatedSummary.turns());
+    }
+
+    @Test
+    void escapesSessionTreeLabelControlCharacters() throws Exception {
+        ObjectMapper objectMapper = new ObjectMapper();
+        Path sessionPath = writeSampleSession(objectMapper);
+        SessionDocument document = JsonlSessionReader.read(objectMapper, sessionPath);
+        String firstTurnId = document.entries().stream()
+                .filter(entry -> entry.type().equals("turn"))
+                .findFirst()
+                .orElseThrow()
+                .id();
+
+        String noteId = JsonlSessionAnnotator.note(
+                objectMapper,
+                sessionPath,
+                firstTurnId,
+                "review\nphase\t\"one\"\rback\\slash",
+                "body"
+        );
+
+        String tree = JsonlSessionReader.read(objectMapper, sessionPath).tree().render();
+
+        assertTrue(tree.contains(noteId + " note title=\"review\\nphase\\t\\\"one\\\"\\rback\\\\slash\" bodyChars=4"));
+    }
+
     private Path writeSampleSession(ObjectMapper objectMapper) throws Exception {
         JsonlSessionRecorder recorder = new JsonlSessionRecorder(objectMapper, new Workspace(tempDir), ".sac-agent4j/sessions");
         recorder.started("fix tests", 4);
