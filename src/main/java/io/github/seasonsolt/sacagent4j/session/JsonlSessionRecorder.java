@@ -10,6 +10,7 @@ import java.io.BufferedWriter;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.StandardOpenOption;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.time.format.DateTimeFormatter;
@@ -44,6 +45,22 @@ public final class JsonlSessionRecorder implements SessionRecorder {
         this.path = dir.resolve(fileName);
         this.writer = Files.newBufferedWriter(path, StandardCharsets.UTF_8);
         write(header(workspace.root().toString()));
+    }
+
+    private JsonlSessionRecorder(ObjectMapper objectMapper, Path path, String sessionId, String leafId) throws IOException {
+        this.objectMapper = objectMapper;
+        this.path = path.toAbsolutePath().normalize();
+        this.sessionId = sessionId;
+        this.leafId = leafId;
+        this.writer = Files.newBufferedWriter(this.path, StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+    }
+
+    public static JsonlSessionRecorder resume(ObjectMapper objectMapper, Path path, String leafId) throws Exception {
+        SessionDocument document = JsonlSessionReader.read(objectMapper, path);
+        if (document.entries().stream().noneMatch(entry -> entry.id().equals(leafId))) {
+            throw new IllegalArgumentException("session entry not found: " + leafId);
+        }
+        return new JsonlSessionRecorder(objectMapper, path, document.sessionId(), leafId);
     }
 
     @Override

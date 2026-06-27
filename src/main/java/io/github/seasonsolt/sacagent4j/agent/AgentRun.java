@@ -4,6 +4,7 @@ import io.github.seasonsolt.sacagent4j.state.AgentState;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * One agent execution lifetime: task, state, history, and step budget.
@@ -19,16 +20,26 @@ public final class AgentRun {
     private int nextStep;
 
     private AgentRun(String task, int maxSteps, AgentState state) {
+        this(task, maxSteps, state, List.of(), 0);
+    }
+
+    private AgentRun(String task, int maxSteps, AgentState state, List<Turn> history, int nextStep) {
         if (maxSteps <= 0) {
             throw new IllegalArgumentException("maxSteps must be positive");
         }
-        this.task = task;
+        this.task = task == null ? "" : task;
         this.maxSteps = maxSteps;
-        this.state = state;
+        this.state = Objects.requireNonNull(state, "state");
+        this.history.addAll(history == null ? List.of() : history);
+        this.nextStep = nextStep;
     }
 
     public static AgentRun start(String task, int maxSteps) {
         return new AgentRun(task, maxSteps, new AgentState());
+    }
+
+    public static AgentRun resume(String task, int maxSteps, AgentState state, List<Turn> history) {
+        return new AgentRun(task, maxSteps, state, history, 0);
     }
 
     public String task() {

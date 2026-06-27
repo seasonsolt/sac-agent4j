@@ -4,13 +4,18 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.seasonsolt.sacagent4j.agent.ActionDispatcher;
 import io.github.seasonsolt.sacagent4j.agent.AgentLoop;
 import io.github.seasonsolt.sacagent4j.agent.AgentResult;
+import io.github.seasonsolt.sacagent4j.agent.AgentRun;
 import io.github.seasonsolt.sacagent4j.agent.StateActionHandler;
 import io.github.seasonsolt.sacagent4j.agent.context.DefaultContextManager;
 import io.github.seasonsolt.sacagent4j.llm.JsonLineLlmClient;
 import io.github.seasonsolt.sacagent4j.llm.LlmClient;
 import io.github.seasonsolt.sacagent4j.llm.OpenAiCompatibleLlmClient;
+import io.github.seasonsolt.sacagent4j.session.JsonlSessionForker;
+import io.github.seasonsolt.sacagent4j.session.JsonlSessionReader;
 import io.github.seasonsolt.sacagent4j.session.JsonlSessionRecorder;
 import io.github.seasonsolt.sacagent4j.session.NoopSessionRecorder;
+import io.github.seasonsolt.sacagent4j.session.SessionDocument;
+import io.github.seasonsolt.sacagent4j.session.SessionReplay;
 import io.github.seasonsolt.sacagent4j.session.SessionRecorder;
 import io.github.seasonsolt.sacagent4j.tool.DefaultPermissionGate;
 import io.github.seasonsolt.sacagent4j.tool.ToolActionHandler;
@@ -22,6 +27,7 @@ import io.github.seasonsolt.sacagent4j.trajectory.NoopTrajectoryLogger;
 import io.github.seasonsolt.sacagent4j.trajectory.TrajectoryLogger;
 import io.github.seasonsolt.sacagent4j.workspace.Workspace;
 import picocli.CommandLine;
+import picocli.CommandLine.Model.CommandSpec;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
@@ -30,7 +36,8 @@ import java.util.concurrent.Callable;
 
 /** CLI entry point that wires the minimal loop with a selected LLM client. */
 @CommandLine.Command(name = "sac-agent4j", mixinStandardHelpOptions = true,
-        description = "A tiny handwritten SWE agent loop for learning and experimentation.")
+        description = "A tiny handwritten SWE agent loop for learning and experimentation.",
+        subcommands = Main.SessionCommand.class)
 public final class Main implements Callable<Integer> {
     @CommandLine.Option(names = "--workspace", defaultValue = ".", description = "Workspace root")
     Path workspace;
@@ -53,12 +60,25 @@ public final class Main implements Callable<Integer> {
     @CommandLine.Option(names = "--session-dir", defaultValue = ".sac-agent4j/sessions", description = "Directory for Pi-style JSONL session files. Blank disables session recording.")
     String sessionDir;
 
-    @CommandLine.Parameters(index = "0..*", arity = "1..*", description = "Task for the agent")
+    @CommandLine.Option(names = "--resume-session", description = "Resume from an existing JSONL session file.")
+    Path resumeSession;
+
+    @CommandLine.Option(names = "--resume-entry", description = "Entry id to resume from. Defaults to the active leaf.")
+    String resumeEntry;
+
+    @CommandLine.Parameters(index = "0..*", arity = "0..*", description = "Task for the agent")
     String[] taskWords;
 
     @Override
     public Integer call() throws Exception {
+        boolean hasTask = taskWords != null && taskWords.length > 0;
+        if (!hasTask && resumeSession == null) {
+            System.err.println("missing task");
+            return 2;
+        }
         ObjectMapper objectMapper = new ObjectMapper();
+        SessionReplay replay = resumeSession == null ? null : SessionReplay.from(objectMapper, resumeSession, resumeEntry);
+        String task = hasTask ? String.join(" ", taskWords) : replay.task();
         Workspace ws = new Workspace(workspace);
         LlmClient llmClient = switch (llm) {
             case "json-line" -> new JsonLineLlmClient(objectMapper, new BufferedReader(new InputStreamReader(System.in)), System.out);
@@ -70,7 +90,9 @@ public final class Main implements Callable<Integer> {
                 : new JsonlTrajectoryLogger(objectMapper, ws, trajectoryDir);
         SessionRecorder sessionRecorder = sessionDir == null || sessionDir.isBlank()
                 ? new NoopSessionRecorder()
-                : new JsonlSessionRecorder(objectMapper, ws, sessionDir);
+                : resumeSession == null
+                        ? new JsonlSessionRecorder(objectMapper, ws, sessionDir)
+                        : JsonlSessionRecorder.resume(objectMapper, resumeSession, replay.leafId());
 
         ToolContext toolContext = new ToolContext(ws, testCommand, ToolPolicy.defaultPolicy());
         ActionDispatcher actionDispatcher = new ActionDispatcher(
@@ -86,7 +108,10 @@ public final class Main implements Callable<Integer> {
                 trajectoryLogger,
                 sessionRecorder
         );
-        AgentResult result = loop.run(String.join(" ", taskWords));
+        AgentRun run = replay == null
+                ? AgentRun.start(task, maxSteps)
+                : AgentRun.resume(task, maxSteps, replay.state(), replay.history());
+        AgentResult result = loop.run(run);
         System.out.println("finished=" + result.finished());
         System.out.println("summary=" + result.summary());
         System.out.println("turns=" + result.history().size());
@@ -96,5 +121,75 @@ public final class Main implements Callable<Integer> {
     public static void main(String[] args) {
         int exitCode = new CommandLine(new Main()).execute(args);
         System.exit(exitCode);
+    }
+
+    @CommandLine.Command(name = "session", description = "Inspect and fork JSONL session files.",
+            subcommands = {SessionSummaryCommand.class, SessionTreeCommand.class, SessionForkCommand.class})
+    static final class SessionCommand implements Runnable {
+        @CommandLine.Spec
+        CommandSpec spec;
+
+        @Override
+        public void run() {
+            spec.commandLine().usage(spec.commandLine().getOut());
+        }
+    }
+
+    @CommandLine.Command(name = "summary", description = "Print a compact session summary.")
+    static final class SessionSummaryCommand implements Callable<Integer> {
+        @CommandLine.Spec
+        CommandSpec spec;
+
+        @CommandLine.Parameters(index = "0", description = "Session JSONL file")
+        Path session;
+
+        @Override
+        public Integer call() throws Exception {
+            SessionDocument document = JsonlSessionReader.read(new ObjectMapper(), session);
+            spec.commandLine().getOut().println(document.summary().render());
+            return 0;
+        }
+    }
+
+    @CommandLine.Command(name = "tree", description = "Print a session parent/child tree.")
+    static final class SessionTreeCommand implements Callable<Integer> {
+        @CommandLine.Spec
+        CommandSpec spec;
+
+        @CommandLine.Parameters(index = "0", description = "Session JSONL file")
+        Path session;
+
+        @Override
+        public Integer call() throws Exception {
+            SessionDocument document = JsonlSessionReader.read(new ObjectMapper(), session);
+            spec.commandLine().getOut().println(document.tree().render());
+            return 0;
+        }
+    }
+
+    @CommandLine.Command(name = "fork", description = "Create a new session file forked from a selected entry.")
+    static final class SessionForkCommand implements Callable<Integer> {
+        @CommandLine.Spec
+        CommandSpec spec;
+
+        @CommandLine.Parameters(index = "0", description = "Session JSONL file")
+        Path session;
+
+        @CommandLine.Option(names = "--entry-id", description = "Entry id to fork from. Defaults to the active leaf.")
+        String entryId;
+
+        @CommandLine.Option(names = "--output-dir", description = "Directory for the forked session. Defaults to a forks directory beside the source session.")
+        Path outputDir;
+
+        @Override
+        public Integer call() throws Exception {
+            ObjectMapper objectMapper = new ObjectMapper();
+            SessionDocument document = JsonlSessionReader.read(objectMapper, session);
+            String forkEntryId = entryId == null || entryId.isBlank() ? document.leafId() : entryId;
+            Path forkDirectory = outputDir == null ? session.toAbsolutePath().normalize().getParent().resolve("forks") : outputDir;
+            Path forkPath = JsonlSessionForker.fork(objectMapper, session, forkEntryId, forkDirectory);
+            spec.commandLine().getOut().println("forkedSession=" + forkPath.toAbsolutePath().normalize());
+            return 0;
+        }
     }
 }

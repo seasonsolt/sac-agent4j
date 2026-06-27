@@ -49,10 +49,17 @@ public final class AgentLoop {
      * @return final status and immutable turn history
      */
     public AgentResult run(String task) throws Exception {
-        AgentRun run = AgentRun.start(task, maxSteps);
+        return run(AgentRun.start(task, maxSteps));
+    }
+
+    /**
+     * Continues an already initialized run, such as one reconstructed from a
+     * session file.
+     */
+    public AgentResult run(AgentRun run) throws Exception {
         lastRun = run;
-        trajectoryLogger.started(task, maxSteps);
-        sessionRecorder.started(task, maxSteps);
+        trajectoryLogger.started(run.task(), run.maxSteps());
+        sessionRecorder.started(run.task(), run.maxSteps());
         try {
             while (run.hasStepsRemaining()) {
                 String context = contextManager.buildPrompt(run).render();

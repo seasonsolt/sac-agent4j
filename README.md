@@ -235,6 +235,77 @@ Disable logging by passing a blank trajectory directory:
 java -jar target/sac-agent4j-0.1.0-SNAPSHOT.jar --trajectory-dir "" "inspect this repo"
 ```
 
+## Team memory: sessions
+
+Runs also write Pi-style JSONL session files by default:
+
+```text
+.sac-agent4j/sessions/<workspace>/<timestamp>_<sessionId>.jsonl
+```
+
+Session files are append-only trees with `id` / `parentId` links. They are meant
+to turn one person's agent run into team-reviewable memory: what task was run,
+which actions were taken, which tools returned what, and where a future branch
+can start.
+
+Inspect a previous session:
+
+```bash
+java -jar target/sac-agent4j-0.1.0-SNAPSHOT.jar \
+  session summary .sac-agent4j/sessions/<workspace>/<session>.jsonl
+```
+
+Print the parent/child tree with entry ids:
+
+```bash
+java -jar target/sac-agent4j-0.1.0-SNAPSHOT.jar \
+  session tree .sac-agent4j/sessions/<workspace>/<session>.jsonl
+```
+
+Create a fork file from the active leaf:
+
+```bash
+java -jar target/sac-agent4j-0.1.0-SNAPSHOT.jar \
+  session fork .sac-agent4j/sessions/<workspace>/<session>.jsonl
+```
+
+Create a fork from a specific entry:
+
+```bash
+java -jar target/sac-agent4j-0.1.0-SNAPSHOT.jar \
+  session fork .sac-agent4j/sessions/<workspace>/<session>.jsonl \
+  --entry-id <entryId>
+```
+
+Resume from a session or fork:
+
+```bash
+java -jar target/sac-agent4j-0.1.0-SNAPSHOT.jar \
+  --resume-session .sac-agent4j/sessions/<workspace>/<session>.jsonl
+```
+
+Resume from a specific entry:
+
+```bash
+java -jar target/sac-agent4j-0.1.0-SNAPSHOT.jar \
+  --resume-session .sac-agent4j/sessions/<workspace>/<session>.jsonl \
+  --resume-entry <entryId>
+```
+
+Resume rebuilds the prompt history and replayable `AgentState` actions from
+the selected ancestry path, then appends the new continuation to the same
+session file. `--max-steps` is counted as additional turns after the resume
+point. Compact `offload_context` entries keep their history record, but their
+full payload is not restored because session files store only key/title/size.
+Use `session tree` when you need to copy an entry id for `--entry-id` or
+`--resume-entry`.
+
+Disable session recording by passing a blank session directory:
+
+```bash
+java -jar target/sac-agent4j-0.1.0-SNAPSHOT.jar --session-dir "" "inspect this repo"
+```
+
 ## Why not Spring AI / LangChain4j yet?
 
 Those frameworks are useful after the core seams are stable. For the first version, this project keeps the agent mechanics visible: action protocol, tool execution, observations, and stopping conditions.

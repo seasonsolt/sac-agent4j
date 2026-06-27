@@ -2,8 +2,10 @@ package io.github.seasonsolt.sacagent4j.agent;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.seasonsolt.sacagent4j.agent.context.DefaultContextManager;
+import io.github.seasonsolt.sacagent4j.llm.LlmClient;
 import io.github.seasonsolt.sacagent4j.llm.ScriptedLlmClient;
 import io.github.seasonsolt.sacagent4j.plan.TodoStatus;
+import io.github.seasonsolt.sacagent4j.state.AgentState;
 import io.github.seasonsolt.sacagent4j.tool.DefaultPermissionGate;
 import io.github.seasonsolt.sacagent4j.tool.ToolActionHandler;
 import io.github.seasonsolt.sacagent4j.tool.ToolContext;
@@ -19,6 +21,7 @@ import java.nio.file.Path;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class AgentLoopTest {
@@ -75,7 +78,34 @@ class AgentLoopTest {
         assertTrue(result.history().get(3).observation().output().contains("very long test output"));
     }
 
+    @Test
+    void resumesFromExistingHistoryWithFreshStepBudget() throws Exception {
+        CapturingLlmClient llmClient = new CapturingLlmClient(List.of(
+                new Action.SetPlan(List.of("continue from replayed context")),
+                new Action.Finish("resumed")
+        ));
+        AgentLoop loop = newLoop(llmClient, 1);
+        AgentRun resumed = AgentRun.resume(
+                "resume task",
+                1,
+                new AgentState(),
+                List.of(new Turn(new Action.ReadFile("README.md"), Observation.ok("prior readme")))
+        );
+
+        AgentResult result = loop.run(resumed);
+
+        assertFalse(result.finished());
+        assertEquals("stopped after max steps", result.summary());
+        assertEquals(2, result.history().size());
+        assertTrue(llmClient.firstContext().contains("prior readme"));
+        assertEquals(1, resumed.nextStep());
+    }
+
     private AgentLoop newLoop(List<Action> actions, int maxSteps) throws Exception {
+        return newLoop(new ScriptedLlmClient(actions), maxSteps);
+    }
+
+    private AgentLoop newLoop(LlmClient llmClient, int maxSteps) throws Exception {
         ObjectMapper objectMapper = new ObjectMapper();
         Workspace workspace = new Workspace(tempDir);
         ToolContext toolContext = new ToolContext(workspace, "true", ToolPolicy.defaultPolicy());
@@ -85,11 +115,32 @@ class AgentLoopTest {
                 toolContext
         );
         return new AgentLoop(
-                new ScriptedLlmClient(actions),
+                llmClient,
                 dispatcher,
                 new DefaultContextManager(objectMapper),
                 maxSteps,
                 new NoopTrajectoryLogger()
         );
+    }
+
+    private static final class CapturingLlmClient implements LlmClient {
+        private final ScriptedLlmClient delegate;
+        private String firstContext;
+
+        private CapturingLlmClient(List<Action> actions) {
+            this.delegate = new ScriptedLlmClient(actions);
+        }
+
+        @Override
+        public Action nextAction(String context) {
+            if (firstContext == null) {
+                firstContext = context;
+            }
+            return delegate.nextAction(context);
+        }
+
+        private String firstContext() {
+            return firstContext == null ? "" : firstContext;
+        }
     }
 }

@@ -31,8 +31,9 @@ Main
        -> ToolActionHandler
        -> ActionDispatcher
        -> DefaultContextManager
-  -> AgentLoop.run(task)
+  -> AgentLoop.run(AgentRun)
        -> AgentRun.start(task, maxSteps)
+          or SessionReplay.from(...).toAgentRun(maxSteps)
        -> ContextManager.buildPrompt(AgentRun).render()
        -> LlmClient.nextAction(context)
        -> AgentLoop handles finish
@@ -73,6 +74,10 @@ Main
 | `Workspace` | Path boundary and workspace file resolution. |
 | `TrajectoryLogger` | Port for recording run events. |
 | `SessionRecorder` | Pi-style append-only session tree for human resume/fork workflows. |
+| `JsonlSessionReader` | Read model for inspecting session trees without replaying the agent runtime. |
+| `JsonlSessionForker` | Creates a new session file from an existing session ancestry path. |
+| `SessionTree` | Renders parent/child entry lineage with copyable entry ids. |
+| `SessionReplay` | Reconstructs prompt history and replayable `AgentState` from a session ancestry path. |
 
 ## AgentState
 
@@ -165,6 +170,34 @@ session header
 ```
 
 This deliberately follows the useful part of Pi's coding-agent design: keep a human-readable session history that can later grow into resume, fork, tree navigation, compaction, and branch summaries. It is not a LangGraph-style checkpoint. It does not currently persist enough runtime state to resume from an exact suspended instruction; it records the action/observation path for human/session workflows.
+
+Session files now have a small read/fork surface:
+
+```text
+session summary <session.jsonl>
+  -> task, status, action counts, active leaf
+
+session tree <session.jsonl>
+  -> parent/child lineage with copyable entry ids
+
+session fork <session.jsonl> [--entry-id <id>]
+  -> new JSONL file with copied ancestry and fork metadata
+
+JsonlSessionRecorder.resume(path, leafId)
+  -> appends future entries with parentId = leafId
+
+--resume-session <session.jsonl> [--resume-entry <id>]
+  -> rebuilds AgentRun history/state from ancestry and continues the loop
+```
+
+This is the first project step from "super individual" logs toward "super team" memory: a teammate can inspect what happened, branch from a specific decision point, and preserve the lineage as JSONL instead of relying on chat screenshots or implicit local context.
+
+Runtime resume is deliberately narrower than full checkpointing. It restores
+the selected task, prior turns, plans/todos, and virtual files by replaying
+state actions from the ancestry path. Tool actions are not re-executed.
+Compact `offload_context` records remain visible in history, but their full
+payload is not restored because the session recorder stores key/title/size
+rather than large content bodies.
 
 ## Tool boundary
 
@@ -316,7 +349,8 @@ Use these questions before adding new features:
 | Done | Remove `ToolExecutor` | Tests and examples use `ToolActionHandler` directly; no facade remains. |
 | Done | Report unreadable search files | `ToolSupport.literalSearch` counts skipped unreadable files instead of swallowing exceptions silently. |
 | Done | Add Pi-style session recorder | JSONL session files now use id/parentId entries as the first step toward resume/fork/tree workflows. |
-| P2 | Add checkpoint/persistence seam | Move beyond in-memory state when needed. |
+| Done | Add JSONL session replay | `--resume-session` can continue from a session/fork ancestry path. |
+| P2 | Add checkpoint/persistence seam | Move beyond replayed session history to exact suspended runtime state when needed. |
 
 ## Relationship to LangChain Deep Agents / pi-style coding agents
 
@@ -334,12 +368,13 @@ Use these questions before adding new features:
 | Safety policy | `ToolPolicy` |
 | Tracing | `TrajectoryLogger` |
 | Pi-style session history | `SessionRecorder` + `JsonlSessionRecorder` |
+| Session tree/resume/fork | `JsonlSessionReader` + `SessionTree` + `JsonlSessionForker` + `SessionReplay` |
 
 Missing or intentionally deferred:
 
 - subagents with isolated context windows
 - human-in-the-loop approval/edit/reject
-- persistent checkpoints and resumability
+- exact persistent checkpoints
 - skill loading
 - streaming events
 - permission profiles

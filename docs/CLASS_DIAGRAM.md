@@ -18,9 +18,11 @@ classDiagram
       -ActionDispatcher actionDispatcher
       -ContextManager contextManager
       -TrajectoryLogger trajectoryLogger
+      -SessionRecorder sessionRecorder
       -int maxSteps
       -AgentRun lastRun
       +run(task) AgentResult
+      +run(run) AgentResult
       +state() AgentState
       +plan() List~TodoItem~
     }
@@ -32,6 +34,7 @@ classDiagram
       -List~Turn~ history
       -int nextStep
       +start(task, maxSteps) AgentRun
+      +resume(task, maxSteps, state, history) AgentRun
       +hasStepsRemaining() boolean
       +record(action, observation) Turn
       +finished(summary) AgentResult
@@ -277,6 +280,47 @@ classDiagram
     class JsonlTrajectoryLogger
     class NoopTrajectoryLogger
 
+    class SessionRecorder {
+      <<interface>>
+      +started(task, maxSteps)
+      +turn(step, action, observation)
+      +finished(finished, summary, turns)
+      +close()
+    }
+
+    class JsonlSessionRecorder {
+      +resume(objectMapper, path, leafId) JsonlSessionRecorder
+    }
+
+    class NoopSessionRecorder
+
+    class JsonlSessionReader {
+      +read(objectMapper, path) SessionDocument
+    }
+
+    class JsonlSessionForker {
+      +fork(objectMapper, session, entryId, outputDir) Path
+    }
+
+    class SessionReplay {
+      +from(objectMapper, path, entryId) SessionReplay
+      +toAgentRun(maxSteps) AgentRun
+    }
+
+    class SessionDocument {
+      +sessionId() String
+      +leafId() String
+      +ancestryTo(entryId) List~SessionEntry~
+      +tree() SessionTree
+      +summary() SessionSummary
+    }
+
+    class SessionEntry
+    class SessionSummary
+    class SessionTree {
+      +render() String
+    }
+
     Main --> AgentLoop : wires
     AgentLoop --> AgentRun : starts/advances
     AgentLoop --> LlmClient : asks next action
@@ -294,10 +338,15 @@ classDiagram
     AgentLoop --> ActionDispatcher : dispatches non-terminal actions
     AgentLoop --> TrajectoryLogger : records events
     AgentLoop --> SessionRecorder : records session tree
+    Main --> SessionReplay : resumes
+    Main --> JsonlSessionRecorder : appends continuation
 
     AgentRun *-- AgentState
     AgentRun *-- Turn
     AgentRun --> AgentResult
+    SessionReplay --> AgentRun
+    SessionReplay --> SessionDocument
+    SessionReplay --> StateActionHandler
 
     ActionDispatcher --> StateActionHandler
     ActionDispatcher --> ToolActionHandler
@@ -356,6 +405,11 @@ classDiagram
     TrajectoryLogger <|.. NoopTrajectoryLogger
     SessionRecorder <|.. JsonlSessionRecorder
     SessionRecorder <|.. NoopSessionRecorder
+    JsonlSessionReader --> SessionDocument
+    JsonlSessionForker --> JsonlSessionReader
+    SessionDocument *-- SessionEntry
+    SessionDocument --> SessionSummary
+    SessionDocument --> SessionTree
 ```
 
 ## Responsibility split
@@ -378,6 +432,8 @@ ProcessRunner      = command process adapter
 LlmClient          = model boundary
 TrajectoryLogger   = trace boundary
 SessionRecorder    = Pi-style session-history boundary
+SessionReplay      = rebuilds a run from session ancestry
+SessionTree        = human-readable parent/child session lineage
 ```
 
 ## Why this is more OO than the previous shape
