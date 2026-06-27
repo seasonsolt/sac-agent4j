@@ -75,8 +75,11 @@ Main
 | `TrajectoryLogger` | Port for recording run events. |
 | `SessionRecorder` | Pi-style append-only session tree for human resume/fork workflows. |
 | `JsonlSessionReader` | Read model for inspecting session trees without replaying the agent runtime. |
+| `JsonlSessionCatalog` | Lists session files under a root for team discovery. |
+| `JsonlSessionAnnotator` | Appends human/team notes to existing session entries. |
 | `JsonlSessionForker` | Creates a new session file from an existing session ancestry path. |
 | `SessionTree` | Renders parent/child entry lineage with copyable entry ids. |
+| `SessionHandoff` | Renders a markdown handoff pack for a selected ancestry path. |
 | `SessionReplay` | Reconstructs prompt history and replayable `AgentState` from a session ancestry path. |
 
 ## AgentState
@@ -174,11 +177,20 @@ This deliberately follows the useful part of Pi's coding-agent design: keep a hu
 Session files now have a small read/fork surface:
 
 ```text
+session list <session-root>
+  -> compact catalog of session files
+
 session summary <session.jsonl>
   -> task, status, action counts, active leaf
 
 session tree <session.jsonl>
   -> parent/child lineage with copyable entry ids
+
+session note <session.jsonl> --entry-id <id> --title <title> --body <body>
+  -> appends a team note under a selected entry
+
+session handoff <session.jsonl> [--entry-id <id>]
+  -> markdown handoff pack with resume command, tree, and selected ancestry
 
 session fork <session.jsonl> [--entry-id <id>]
   -> new JSONL file with copied ancestry and fork metadata

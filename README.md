@@ -255,11 +255,36 @@ java -jar target/sac-agent4j-0.1.0-SNAPSHOT.jar \
   session summary .sac-agent4j/sessions/<workspace>/<session>.jsonl
 ```
 
+List sessions under a session root:
+
+```bash
+java -jar target/sac-agent4j-0.1.0-SNAPSHOT.jar \
+  session list .sac-agent4j/sessions
+```
+
 Print the parent/child tree with entry ids:
 
 ```bash
 java -jar target/sac-agent4j-0.1.0-SNAPSHOT.jar \
   session tree .sac-agent4j/sessions/<workspace>/<session>.jsonl
+```
+
+Attach a team note to an entry:
+
+```bash
+java -jar target/sac-agent4j-0.1.0-SNAPSHOT.jar \
+  session note .sac-agent4j/sessions/<workspace>/<session>.jsonl \
+  --entry-id <entryId> \
+  --title "handoff" \
+  --body "Ready for teammate review."
+```
+
+Generate a markdown handoff pack:
+
+```bash
+java -jar target/sac-agent4j-0.1.0-SNAPSHOT.jar \
+  session handoff .sac-agent4j/sessions/<workspace>/<session>.jsonl \
+  --entry-id <entryId>
 ```
 
 Create a fork file from the active leaf:

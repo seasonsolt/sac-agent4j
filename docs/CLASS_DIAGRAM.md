@@ -298,8 +298,24 @@ classDiagram
       +read(objectMapper, path) SessionDocument
     }
 
+    class JsonlSessionCatalog {
+      +list(objectMapper, root) List~SessionListItem~
+    }
+
+    class SessionListItem {
+      +render() String
+    }
+
+    class JsonlSessionAnnotator {
+      +note(objectMapper, sessionPath, entryId, title, body) String
+    }
+
     class JsonlSessionForker {
       +fork(objectMapper, session, entryId, outputDir) Path
+    }
+
+    class SessionHandoff {
+      +render(document, entryId) String
     }
 
     class SessionReplay {
@@ -406,7 +422,11 @@ classDiagram
     SessionRecorder <|.. JsonlSessionRecorder
     SessionRecorder <|.. NoopSessionRecorder
     JsonlSessionReader --> SessionDocument
+    JsonlSessionCatalog --> JsonlSessionReader
+    JsonlSessionCatalog --> SessionListItem
+    JsonlSessionAnnotator --> JsonlSessionReader
     JsonlSessionForker --> JsonlSessionReader
+    SessionHandoff --> SessionDocument
     SessionDocument *-- SessionEntry
     SessionDocument --> SessionSummary
     SessionDocument --> SessionTree
