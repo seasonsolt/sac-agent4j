@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.github.seasonsolt.sacagent4j.agent.Action;
 import io.github.seasonsolt.sacagent4j.agent.Observation;
 import io.github.seasonsolt.sacagent4j.agent.Turn;
+import io.github.seasonsolt.sacagent4j.agent.context.HistoryRenderer;
 import io.github.seasonsolt.sacagent4j.plan.TodoStatus;
 import io.github.seasonsolt.sacagent4j.workspace.Workspace;
 import org.junit.jupiter.api.Test;
@@ -14,6 +15,7 @@ import java.nio.file.Path;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 final class SessionReadModelTest {
@@ -95,6 +97,53 @@ final class SessionReadModelTest {
         Turn lastTurn = replay.history().get(replay.history().size() - 1);
         assertTrue(lastTurn.action() instanceof Action.ReadFile);
         assertEquals("source code", lastTurn.observation().output());
+    }
+
+    @Test
+    void summarizesOnlyActiveBranchAncestry() throws Exception {
+        ObjectMapper objectMapper = new ObjectMapper();
+        Path sessionPath = writeSampleSession(objectMapper);
+        SessionDocument document = JsonlSessionReader.read(objectMapper, sessionPath);
+        String firstTurnId = document.entries().stream()
+                .filter(entry -> entry.type().equals("turn"))
+                .findFirst()
+                .orElseThrow()
+                .id();
+
+        try (JsonlSessionRecorder recorder = JsonlSessionRecorder.resume(objectMapper, sessionPath, firstTurnId)) {
+            recorder.started("branch task", 2);
+            recorder.turn(0, new Action.Search("TODO"), Observation.ok("none"));
+            recorder.finished(true, "branch done", 1);
+        }
+
+        SessionSummary summary = JsonlSessionReader.read(objectMapper, sessionPath).summary();
+
+        assertEquals("branch task", summary.task());
+        assertEquals("branch done", summary.finalSummary());
+        assertEquals(2, summary.turns());
+        assertEquals(1, summary.actionCounts().get("read_file"));
+        assertEquals(1, summary.actionCounts().get("search"));
+        assertFalse(summary.actionCounts().containsKey("run_tests"));
+    }
+
+    @Test
+    void replayedOffloadKeepsCompactContentSizeInPromptHistory() throws Exception {
+        ObjectMapper objectMapper = new ObjectMapper();
+        JsonlSessionRecorder recorder = new JsonlSessionRecorder(objectMapper, new Workspace(tempDir), ".sac-agent4j/sessions");
+        recorder.started("offload replay", 4);
+        recorder.turn(
+                0,
+                new Action.OffloadContext("failure-log", "full failure log", "0123456789"),
+                Observation.ok("context offloaded: failure-log (10 chars)")
+        );
+        recorder.finished(true, "paused", 1);
+        recorder.close();
+
+        SessionReplay replay = SessionReplay.from(objectMapper, recorder.path().orElseThrow(), null);
+        String rendered = new HistoryRenderer(objectMapper).render(replay.history());
+
+        assertTrue(rendered.contains("\"contentChars\":10"));
+        assertFalse(rendered.contains("\"contentChars\":0"));
     }
 
     @Test

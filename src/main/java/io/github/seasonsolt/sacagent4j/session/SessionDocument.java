@@ -53,6 +53,7 @@ public record SessionDocument(Path path, ObjectNode header, List<SessionEntry> e
     }
 
     public SessionSummary summary() {
+        String activeLeafId = leafId();
         String task = "";
         String status = "open";
         boolean finished = false;
@@ -60,7 +61,7 @@ public record SessionDocument(Path path, ObjectNode header, List<SessionEntry> e
         int turns = 0;
         Map<String, Integer> actionCounts = new LinkedHashMap<>();
 
-        for (SessionEntry entry : entries) {
+        for (SessionEntry entry : activeLeafId.isBlank() ? List.<SessionEntry>of() : ancestryTo(activeLeafId)) {
             if (entry.type().equals("started")) {
                 task = entry.node().path("task").asText("");
             } else if (entry.type().equals("turn")) {
@@ -82,7 +83,7 @@ public record SessionDocument(Path path, ObjectNode header, List<SessionEntry> e
                 finished,
                 finalSummary,
                 turns,
-                leafId(),
+                activeLeafId,
                 Collections.unmodifiableMap(new LinkedHashMap<>(actionCounts))
         );
     }
