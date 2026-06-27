@@ -10,6 +10,7 @@ import io.github.seasonsolt.sacagent4j.agent.context.DefaultContextManager;
 import io.github.seasonsolt.sacagent4j.llm.JsonLineLlmClient;
 import io.github.seasonsolt.sacagent4j.llm.LlmClient;
 import io.github.seasonsolt.sacagent4j.llm.OpenAiCompatibleLlmClient;
+import io.github.seasonsolt.sacagent4j.session.JsonlSessionAnnotator;
 import io.github.seasonsolt.sacagent4j.session.JsonlSessionCatalog;
 import io.github.seasonsolt.sacagent4j.session.JsonlSessionForker;
 import io.github.seasonsolt.sacagent4j.session.JsonlSessionReader;
@@ -129,6 +130,7 @@ public final class Main implements Callable<Integer> {
                     SessionSummaryCommand.class,
                     SessionTreeCommand.class,
                     SessionListCommand.class,
+                    SessionNoteCommand.class,
                     SessionForkCommand.class
             })
     static final class SessionCommand implements Runnable {
@@ -187,6 +189,31 @@ public final class Main implements Callable<Integer> {
             for (var item : JsonlSessionCatalog.list(objectMapper, directory)) {
                 spec.commandLine().getOut().println(item.render());
             }
+            return 0;
+        }
+    }
+
+    @CommandLine.Command(name = "note", description = "Append a team note to a selected session entry.")
+    static final class SessionNoteCommand implements Callable<Integer> {
+        @CommandLine.Spec
+        CommandSpec spec;
+
+        @CommandLine.Parameters(index = "0", description = "Session JSONL file")
+        Path session;
+
+        @CommandLine.Option(names = "--entry-id", required = true, description = "Entry id to annotate.")
+        String entryId;
+
+        @CommandLine.Option(names = "--title", required = true, description = "Note title.")
+        String title;
+
+        @CommandLine.Option(names = "--body", required = true, description = "Note body.")
+        String body;
+
+        @Override
+        public Integer call() throws Exception {
+            String noteId = JsonlSessionAnnotator.note(new ObjectMapper(), session, entryId, title, body);
+            spec.commandLine().getOut().println("note=" + noteId);
             return 0;
         }
     }

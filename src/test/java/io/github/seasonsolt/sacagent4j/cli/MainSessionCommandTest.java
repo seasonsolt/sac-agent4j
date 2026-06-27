@@ -97,6 +97,28 @@ final class MainSessionCommandTest {
     }
 
     @Test
+    void appendsSessionNoteFromCli() throws Exception {
+        Path sessionPath = writeSession();
+        ObjectMapper objectMapper = new ObjectMapper();
+        String leafId = JsonlSessionReader.read(objectMapper, sessionPath).leafId();
+        StringWriter output = new StringWriter();
+        CommandLine commandLine = new CommandLine(new Main());
+        commandLine.setOut(new PrintWriter(output, true));
+
+        int exitCode = commandLine.execute(
+                "session", "note", sessionPath.toString(),
+                "--entry-id", leafId,
+                "--title", "handoff",
+                "--body", "Ready for teammate review."
+        );
+
+        assertEquals(0, exitCode);
+        assertTrue(output.toString().startsWith("note="));
+        String tree = JsonlSessionReader.read(objectMapper, sessionPath).tree().render();
+        assertTrue(tree.contains("note title=\"handoff\" bodyChars=26"));
+    }
+
+    @Test
     void resumesSessionFromCliAndAppendsContinuation() throws Exception {
         Path sessionPath = writeSession();
         ObjectMapper objectMapper = new ObjectMapper();
