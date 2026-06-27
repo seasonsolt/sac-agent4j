@@ -16,7 +16,7 @@ public record SessionListItem(
 ) {
     public String render() {
         return "timestamp=" + timestamp
-                + " status=" + status
+                + " status=" + escape(status)
                 + " turns=" + turns
                 + " task=\"" + escape(task) + "\""
                 + " summary=\"" + escape(finalSummary) + "\""

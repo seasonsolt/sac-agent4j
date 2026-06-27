@@ -2,9 +2,6 @@ package io.github.seasonsolt.sacagent4j.session;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import io.github.seasonsolt.sacagent4j.agent.Action;
-import io.github.seasonsolt.sacagent4j.agent.Observation;
-import io.github.seasonsolt.sacagent4j.workspace.Workspace;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -23,10 +20,9 @@ final class SessionCatalogTest {
     @Test
     void listsSessionsNewestFirstWithCompactRows() throws Exception {
         ObjectMapper objectMapper = new ObjectMapper();
-        Path older = writeSession(objectMapper, "inspect repo", "old done");
-        Thread.sleep(2);
-        Path newer = writeSession(objectMapper, "fix tests", "new done");
-        Path root = older.getParent().getParent();
+        Path root = tempDir.resolve("sessions");
+        Path older = writeFixedTimestampSession(objectMapper, root.resolve("older.jsonl"), "old1", "inspect repo", "2026-06-27T00:00:00Z", "old done");
+        Path newer = writeFixedTimestampSession(objectMapper, root.resolve("newer.jsonl"), "new1", "fix tests", "2026-06-27T00:00:01Z", "new done");
 
         List<SessionListItem> items = JsonlSessionCatalog.list(objectMapper, root);
 
@@ -53,7 +49,7 @@ final class SessionCatalogTest {
                 "session\n1",
                 java.time.Instant.parse("2026-06-27T00:00:00Z"),
                 "fix \"tests\"\nnow",
-                "finished",
+                "finished\nstatus",
                 "done\rwith\ttabs",
                 2,
                 "leaf\t1"
@@ -62,6 +58,7 @@ final class SessionCatalogTest {
         String rendered = item.render();
 
         assertTrue(rendered.contains("task=\"fix \\\"tests\\\"\\nnow\""));
+        assertTrue(rendered.contains("status=finished\\nstatus"));
         assertTrue(rendered.contains("summary=\"done\\rwith\\ttabs\""));
         assertTrue(rendered.contains("leaf=leaf\\t1"));
         assertTrue(rendered.contains("session=session\\n1"));
@@ -75,8 +72,8 @@ final class SessionCatalogTest {
     void sortsEqualTimestampsByPath() throws Exception {
         ObjectMapper objectMapper = new ObjectMapper();
         Path root = tempDir.resolve("sessions");
-        Path laterPathLexically = writeFixedTimestampSession(objectMapper, root.resolve("b.jsonl"), "b1", "b task");
-        Path earlierPathLexically = writeFixedTimestampSession(objectMapper, root.resolve("a.jsonl"), "a1", "a task");
+        Path laterPathLexically = writeFixedTimestampSession(objectMapper, root.resolve("b.jsonl"), "b1", "b task", "2026-06-27T00:00:00Z", "done");
+        Path earlierPathLexically = writeFixedTimestampSession(objectMapper, root.resolve("a.jsonl"), "a1", "a task", "2026-06-27T00:00:00Z", "done");
 
         List<SessionListItem> items = JsonlSessionCatalog.list(objectMapper, root);
 
@@ -100,22 +97,13 @@ final class SessionCatalogTest {
         assertTrue(exception.getCause() != null);
     }
 
-    private Path writeSession(ObjectMapper objectMapper, String task, String summary) throws Exception {
-        JsonlSessionRecorder recorder = new JsonlSessionRecorder(objectMapper, new Workspace(tempDir), ".sac-agent4j/sessions");
-        recorder.started(task, 4);
-        recorder.turn(0, new Action.ReadFile("README.md"), Observation.ok("readme"));
-        recorder.finished(true, summary, 1);
-        recorder.close();
-        return recorder.path().orElseThrow();
-    }
-
-    private Path writeFixedTimestampSession(ObjectMapper objectMapper, Path path, String sessionId, String task) throws Exception {
+    private Path writeFixedTimestampSession(ObjectMapper objectMapper, Path path, String sessionId, String task, String timestamp, String summary) throws Exception {
         Files.createDirectories(path.getParent());
         ObjectNode header = objectMapper.createObjectNode();
         header.put("type", "session");
         header.put("version", 1);
         header.put("id", sessionId);
-        header.put("timestamp", "2026-06-27T00:00:00Z");
+        header.put("timestamp", timestamp);
         header.put("cwd", tempDir.toString());
 
         ObjectNode started = objectMapper.createObjectNode();
@@ -132,7 +120,7 @@ final class SessionCatalogTest {
         finished.put("parentId", sessionId + "s");
         finished.put("timestamp", "2026-06-27T00:00:02Z");
         finished.put("finished", true);
-        finished.put("summary", "done");
+        finished.put("summary", summary);
         finished.put("turns", 0);
 
         Files.write(path, List.of(
