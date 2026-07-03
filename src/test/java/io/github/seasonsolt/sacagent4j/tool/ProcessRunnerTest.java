@@ -49,6 +49,22 @@ class ProcessRunnerTest {
     }
 
     @Test
+    void capturesOutputLargerThanPipeBufferWithoutDeadlock() throws Exception {
+        // 200KB of output on both streams exceeds the OS pipe buffer; reading only
+        // after waitFor would block the child on write and surface as a false timeout.
+        String command = "head -c 200000 /dev/zero | tr '\\0' a; "
+                + "head -c 200000 /dev/zero | tr '\\0' b 1>&2";
+
+        // Exit 0 (rather than a timeout) is the regression signal: draining both
+        // streams concurrently is what lets the child finish its large writes. The
+        // stderr bytes themselves are dropped by the 12KB output truncation.
+        Observation observation = ProcessRunner.runShell(tempDir, command, Duration.ofSeconds(30));
+
+        assertEquals(0, observation.exitCode());
+        assertTrue(observation.output().contains("a"));
+    }
+
+    @Test
     void applyPatchToolUsesProcessRunnerTimeoutPath() throws Exception {
         Files.writeString(tempDir.resolve("file.txt"), "before\n");
         String patch = "diff --git a/file.txt b/file.txt\n"
